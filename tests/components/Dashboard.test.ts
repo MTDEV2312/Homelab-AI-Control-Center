@@ -55,4 +55,43 @@ describe("Dashboard component", () => {
       { name: "traefik", externalId: "traefik-c", integration: "docker" },
     ]);
   });
+
+  it("opens service detail panel with live metrics when clicking a service item", async () => {
+    const wrapper = mount(Dashboard, {
+      props: {
+        summary: { total: 1, online: 1, unhealthy: 0 },
+        integrationStatus: { docker: "available" },
+        services: [
+          {
+            id: "1",
+            name: "jellyfin",
+            externalId: "jellyfin-c",
+            integration: "docker",
+            status: "running",
+            metrics: {
+              available: true,
+              cpuPercent: 12.5,
+              memoryUsedBytes: 536870912,
+              memoryLimitBytes: 2147483648,
+              uptimeSeconds: 86400,
+            },
+          },
+        ],
+      },
+    });
+
+    expect(wrapper.find(".service-detail-panel").exists()).toBe(false);
+
+    await wrapper.find(".service-item").trigger("click");
+
+    const detailPanel = wrapper.find(".service-detail-panel");
+    expect(detailPanel.exists()).toBe(true);
+    expect(detailPanel.text()).toContain("jellyfin");
+    expect(detailPanel.text()).toContain("12.5%");
+    expect(detailPanel.text()).toContain("CPU Usage");
+    expect(detailPanel.text()).toContain("Memory Usage");
+
+    await detailPanel.find(".close-btn").trigger("click");
+    expect(wrapper.find(".service-detail-panel").exists()).toBe(false);
+  });
 });

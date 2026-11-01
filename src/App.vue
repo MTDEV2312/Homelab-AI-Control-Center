@@ -5,6 +5,7 @@
       :integration-status="data.integrationStatus"
       :services="data.services"
       @register-service="handleRegister"
+      @select-service="handleSelectService"
     />
   </main>
 </template>
@@ -46,6 +47,21 @@ async function handleRegister(payload: { name: string; externalId: string; integ
     }
   } catch (error) {
     console.error("Failed to register service", error);
+  }
+}
+
+async function handleSelectService(service: ServiceItem) {
+  try {
+    const res = await fetch(`/api/services/${service.id}`);
+    if (res.ok) {
+      const detailed = await res.json();
+      const idx = data.value.services.findIndex((s) => s.id === service.id);
+      if (idx !== -1) {
+        data.value.services[idx] = detailed;
+      }
+    }
+  } catch (error) {
+    console.error("Failed to fetch service details", error);
   }
 }
 
@@ -116,7 +132,7 @@ ul {
   padding: 0;
   margin: 0;
 }
-li {
+.service-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -125,6 +141,11 @@ li {
   margin-bottom: 0.5rem;
   border-radius: 6px;
   border: 1px solid #334155;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.service-item:hover {
+  background: #273549;
 }
 .service-status {
   padding: 0.2rem 0.5rem;
@@ -132,5 +153,45 @@ li {
   font-size: 0.85rem;
   text-transform: uppercase;
   background: #334155;
+}
+.service-detail-panel {
+  background: #1e293b;
+  border: 1px solid #3b82f6;
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-top: 1.5rem;
+}
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.close-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: #94a3b8;
+  padding: 0.2rem 0.5rem;
+}
+.close-btn:hover {
+  color: #fff;
+  background: #334155;
+}
+.metrics-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.metric-item {
+  background: #0f172a;
+  padding: 0.75rem;
+  border-radius: 6px;
+  border: 1px solid #334155;
+}
+.metrics-notice {
+  margin-top: 1rem;
+  color: #94a3b8;
 }
 </style>
