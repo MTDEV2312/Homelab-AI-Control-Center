@@ -1,6 +1,13 @@
 import Fastify from "fastify";
 import crypto from "node:crypto";
 
+export type ServiceStatus = "running" | "stopped" | "unhealthy" | "unknown";
+export type IntegrationHealth = "available" | "unavailable";
+
+export interface DockerClient {
+  getContainerStatus(containerId: string): Promise<ServiceStatus>;
+}
+
 export interface Service {
   id: string;
   name: string;
@@ -9,9 +16,14 @@ export interface Service {
   createdAt: string;
 }
 
-export function buildApp() {
+export interface AppOptions {
+  dockerClient?: DockerClient;
+}
+
+export function buildApp(options: AppOptions = {}) {
   const app = Fastify();
   const services: Service[] = [];
+  const dockerClient = options.dockerClient;
 
   app.post<{
     Body: { name: string; externalId: string; integration: string };
@@ -28,6 +40,47 @@ export function buildApp() {
 
     services.push(newService);
     return reply.status(201).send(newService);
+  });
+
+  app.get("/api/services", async () => {
+    let online = 0;
+    let unhealthy = 0;
+    let dockerStatus: IntegrationHealth = "available";
+
+    const enrichedServices = await Promise.all(
+      services.map(async (service) => {
+        let status: ServiceStatus = "unknown";
+        if (dockerClient && service.integration === "docker") {
+          try {
+            status = await dockerClient.getContainerStatus(service.externalId);
+          } catch {
+            dockerStatus = "unavailable";
+            status = "unknown";
+          }
+        }
+
+        if (status === "running") online++;
+        if (status === "unhealthy") unhealthy++;
+
+        return {
+          ...service,
+          status,
+          lastCheckedAt: new Date().toISOString(),
+        };
+      })
+    );
+
+    return {
+      summary: {
+        total: services.length,
+        online,
+        unhealthy,
+      },
+      integrationStatus: {
+        docker: dockerStatus,
+      },
+      services: enrichedServices,
+    };
   });
 
   return app;
