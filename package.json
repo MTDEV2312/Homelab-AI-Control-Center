@@ -4,6 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "dev:api": "node --experimental-strip-types src/server.ts",
+    "dev:web": "vite",
     "test": "vitest run"
   },
   "keywords": [],
@@ -23,7 +25,9 @@
     "@vitejs/plugin-vue": "^6.0.10",
     "@vue/test-utils": "^2.5.1",
     "happy-dom": "^21.0.4",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
+    "vite": "^8.3.5",
     "vitest": "^5.0.5",
     "vue": "^3.5.44"
   },

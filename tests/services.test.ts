@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildApp } from "../src/app.js";
+import { buildApp } from "../src/app.ts";
 
 describe("POST /api/services", () => {
   it("registers a valid Docker service", async () => {

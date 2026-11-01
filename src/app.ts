@@ -5,7 +5,7 @@ import {
   type Service,
   type ServiceStatus,
   type IntegrationHealth,
-} from "./routes/services.js";
+} from "./routes/services.ts";
 
 export type { DockerClient, Service, ServiceStatus, IntegrationHealth };
 

@@ -1,0 +1,12 @@
+import { buildApp } from "./app.ts";
+
+const port = Number(process.env.PORT) || 3001;
+const app = buildApp();
+
+app.listen({ port, host: "0.0.0.0" }, (err, address) => {
+  if (err) {
+    console.error(err);
+    process.exit(1);
+  }
+  console.log(`API Server listening on ${address}`);
+});
