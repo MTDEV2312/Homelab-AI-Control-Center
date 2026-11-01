@@ -4,8 +4,17 @@ import crypto from "node:crypto";
 export type ServiceStatus = "running" | "stopped" | "unhealthy" | "unknown";
 export type IntegrationHealth = "available" | "unavailable";
 
+export interface ContainerMetrics {
+  available: boolean;
+  cpuPercent?: number;
+  memoryUsedBytes?: number;
+  memoryLimitBytes?: number;
+  uptimeSeconds?: number;
+}
+
 export interface DockerClient {
   getContainerStatus(containerId: string): Promise<ServiceStatus>;
+  getContainerMetrics?(containerId: string): Promise<Omit<ContainerMetrics, "available">>;
 }
 
 export interface Service {
@@ -82,6 +91,39 @@ export async function registerServicesRoutes(
         docker: dockerStatus,
       },
       services: enrichedServices,
+    };
+  });
+
+  app.get<{ Params: { id: string } }>("/api/services/:id", async (request, reply) => {
+    const { id } = request.params;
+    const service = services.find((s) => s.id === id);
+    if (!service) {
+      return reply.status(404).send({ message: "Service not found" });
+    }
+
+    let status: ServiceStatus = "unknown";
+    let metrics: ContainerMetrics = { available: false };
+
+    if (dockerClient && service.integration === "docker") {
+      try {
+        status = await dockerClient.getContainerStatus(service.externalId);
+        if (status === "running" && dockerClient.getContainerMetrics) {
+          const rawMetrics = await dockerClient.getContainerMetrics(service.externalId);
+          metrics = {
+            available: true,
+            ...rawMetrics,
+          };
+        }
+      } catch {
+        status = "unknown";
+        metrics = { available: false };
+      }
+    }
+
+    return {
+      ...service,
+      status,
+      metrics,
     };
   });
 }

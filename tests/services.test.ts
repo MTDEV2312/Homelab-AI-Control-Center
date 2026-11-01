@@ -119,3 +119,48 @@ describe("GET /api/services", () => {
     });
   });
 });
+
+describe("GET /api/services/:id", () => {
+  it("returns service details and live CPU, memory, and uptime metrics when container is running", async () => {
+    const mockDocker = {
+      getContainerStatus: async () => "running" as const,
+      getContainerMetrics: async () => ({
+        cpuPercent: 12.5,
+        memoryUsedBytes: 536870912,
+        memoryLimitBytes: 2147483648,
+        uptimeSeconds: 86400,
+      }),
+    };
+
+    const app = buildApp({ dockerClient: mockDocker });
+
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "jellyfin", externalId: "jellyfin-c", integration: "docker" },
+    });
+    const created = createRes.json();
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/services/${created.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body).toMatchObject({
+      id: created.id,
+      name: "jellyfin",
+      externalId: "jellyfin-c",
+      integration: "docker",
+      status: "running",
+      metrics: {
+        available: true,
+        cpuPercent: 12.5,
+        memoryUsedBytes: 536870912,
+        memoryLimitBytes: 2147483648,
+        uptimeSeconds: 86400,
+      },
+    });
+  });
+});
