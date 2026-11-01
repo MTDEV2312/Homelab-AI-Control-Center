@@ -1,112 +1,32 @@
 import type { FastifyInstance } from "fastify";
-import crypto from "node:crypto";
-import type {
-  Service,
-  ServiceStatus,
-  IntegrationHealth,
-  ContainerMetrics,
-  DockerClient,
-} from "../interfaces/service.ts";
+import type { ServiceManager } from "../services/serviceManager.ts";
 
 export interface ServicesRouteOptions {
-  services: Service[];
-  dockerClient?: DockerClient;
+  serviceManager: ServiceManager;
 }
 
 export async function registerServicesRoutes(
   app: FastifyInstance,
   options: ServicesRouteOptions
 ) {
-  const { services, dockerClient } = options;
+  const { serviceManager } = options;
 
   app.post<{
     Body: { name: string; externalId: string; integration: string };
   }>("/api/services", async (request, reply) => {
-    const { name, externalId, integration } = request.body;
-
-    const newService: Service = {
-      id: crypto.randomUUID(),
-      name,
-      externalId,
-      integration,
-      createdAt: new Date().toISOString(),
-    };
-
-    services.push(newService);
-    return reply.status(201).send(newService);
+    const created = await serviceManager.register(request.body);
+    return reply.status(201).send(created);
   });
 
   app.get("/api/services", async () => {
-    let online = 0;
-    let unhealthy = 0;
-    let dockerStatus: IntegrationHealth = "available";
-
-    const enrichedServices = await Promise.all(
-      services.map(async (service) => {
-        let status: ServiceStatus = "unknown";
-        if (dockerClient && service.integration === "docker") {
-          try {
-            status = await dockerClient.getContainerStatus(service.externalId);
-          } catch {
-            dockerStatus = "unavailable";
-            status = "unknown";
-          }
-        }
-
-        if (status === "running") online++;
-        if (status === "unhealthy") unhealthy++;
-
-        return {
-          ...service,
-          status,
-          lastCheckedAt: new Date().toISOString(),
-        };
-      })
-    );
-
-    return {
-      summary: {
-        total: services.length,
-        online,
-        unhealthy,
-      },
-      integrationStatus: {
-        docker: dockerStatus,
-      },
-      services: enrichedServices,
-    };
+    return serviceManager.list();
   });
 
   app.get<{ Params: { id: string } }>("/api/services/:id", async (request, reply) => {
-    const { id } = request.params;
-    const service = services.find((s) => s.id === id);
-    if (!service) {
+    const result = await serviceManager.getById(request.params.id);
+    if (!result) {
       return reply.status(404).send({ message: "Service not found" });
     }
-
-    let status: ServiceStatus = "unknown";
-    let metrics: ContainerMetrics = { available: false };
-
-    if (dockerClient && service.integration === "docker") {
-      try {
-        status = await dockerClient.getContainerStatus(service.externalId);
-        if (status === "running" && dockerClient.getContainerMetrics) {
-          const rawMetrics = await dockerClient.getContainerMetrics(service.externalId);
-          metrics = {
-            available: true,
-            ...rawMetrics,
-          };
-        }
-      } catch {
-        status = "unknown";
-        metrics = { available: false };
-      }
-    }
-
-    return {
-      ...service,
-      status,
-      metrics,
-    };
+    return result;
   });
 }
