@@ -1,6 +1,21 @@
 export type ServiceStatus = "running" | "stopped" | "unhealthy" | "unknown";
 export type IntegrationHealth = "available" | "unavailable";
 
+export type LogLevel = "info" | "warn" | "error";
+
+export interface LogEntry {
+  timestamp: string;
+  level: LogLevel;
+  message: string;
+}
+
+export interface LogFilterOptions {
+  query?: string;
+  level?: LogLevel;
+  since?: string;
+  limit?: number;
+}
+
 export interface ContainerMetrics {
   available: boolean;
   reason?: string;
@@ -13,6 +28,7 @@ export interface ContainerMetrics {
 export interface DockerClient {
   getContainerStatus(containerId: string): Promise<ServiceStatus>;
   getContainerMetrics?(containerId: string): Promise<Omit<ContainerMetrics, "available">>;
+  getContainerLogs?(containerId: string, options?: LogFilterOptions): Promise<LogEntry[]>;
 }
 
 export interface Service {

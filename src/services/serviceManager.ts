@@ -5,6 +5,8 @@ import type {
   IntegrationHealth,
   ContainerMetrics,
   DockerClient,
+  LogEntry,
+  LogFilterOptions,
 } from "../interfaces/service.ts";
 
 export interface ServicesListResult {
@@ -129,6 +131,25 @@ export class ServiceManager {
       ...service,
       status,
       metrics,
+    };
+  }
+
+  async getLogs(id: string, options?: LogFilterOptions): Promise<{ serviceId: string; entries: LogEntry[] } | null> {
+    const service = this.services.find((s) => s.id === id);
+    if (!service) return null;
+
+    let entries: LogEntry[] = [];
+    if (this.dockerClient?.getContainerLogs && service.integration === "docker") {
+      try {
+        entries = await this.dockerClient.getContainerLogs(service.externalId, options);
+      } catch {
+        entries = [];
+      }
+    }
+
+    return {
+      serviceId: service.id,
+      entries,
     };
   }
 }

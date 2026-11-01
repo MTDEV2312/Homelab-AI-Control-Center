@@ -196,3 +196,52 @@ describe("GET /api/services/:id", () => {
     });
   });
 });
+
+describe("GET /api/services/:id/logs", () => {
+  it("returns bounded list of log entries with timestamp, level, and message", async () => {
+    const mockDocker = {
+      getContainerStatus: async () => "running" as const,
+      getContainerLogs: async () => [
+        {
+          timestamp: "2026-10-31T21:00:00.000Z",
+          level: "info" as const,
+          message: "Server started on port 8096",
+        },
+        {
+          timestamp: "2026-10-31T21:01:00.000Z",
+          level: "warn" as const,
+          message: "High memory usage detected",
+        },
+      ],
+    };
+
+    const app = buildApp({ dockerClient: mockDocker });
+
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "jellyfin", externalId: "jellyfin-c", integration: "docker" },
+    });
+    const created = createRes.json();
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/services/${created.id}/logs`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.serviceId).toBe(created.id);
+    expect(body.entries).toHaveLength(2);
+    expect(body.entries[0]).toEqual({
+      timestamp: "2026-10-31T21:00:00.000Z",
+      level: "info",
+      message: "Server started on port 8096",
+    });
+    expect(body.entries[1]).toEqual({
+      timestamp: "2026-10-31T21:01:00.000Z",
+      level: "warn",
+      message: "High memory usage detected",
+    });
+  });
+});

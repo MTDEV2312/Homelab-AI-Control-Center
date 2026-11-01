@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { ServiceManager } from "../services/serviceManager.ts";
+import type { LogFilterOptions } from "../interfaces/service.ts";
 
 export interface ServicesRouteOptions {
   serviceManager: ServiceManager;
@@ -29,4 +30,15 @@ export async function registerServicesRoutes(
     }
     return result;
   });
+
+  app.get<{ Params: { id: string }; Querystring: LogFilterOptions }>(
+    "/api/services/:id/logs",
+    async (request, reply) => {
+      const result = await serviceManager.getLogs(request.params.id, request.query);
+      if (!result) {
+        return reply.status(404).send({ message: "Service not found" });
+      }
+      return result;
+    }
+  );
 }
