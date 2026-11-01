@@ -3,6 +3,7 @@ export type IntegrationHealth = "available" | "unavailable";
 
 export interface ContainerMetrics {
   available: boolean;
+  reason?: string;
   cpuPercent?: number;
   memoryUsedBytes?: number;
   memoryLimitBytes?: number;

@@ -163,4 +163,36 @@ describe("GET /api/services/:id", () => {
       },
     });
   });
+
+  it("returns service details with metrics marked unavailable when container is stopped or unreachable", async () => {
+    const mockStoppedDocker = {
+      getContainerStatus: async () => "stopped" as const,
+    };
+
+    const app = buildApp({ dockerClient: mockStoppedDocker });
+
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "plex", externalId: "plex-c", integration: "docker" },
+    });
+    const created = createRes.json();
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/services/${created.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body).toMatchObject({
+      id: created.id,
+      name: "plex",
+      status: "stopped",
+      metrics: {
+        available: false,
+        reason: "Container is not running",
+      },
+    });
+  });
 });

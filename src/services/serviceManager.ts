@@ -96,7 +96,10 @@ export class ServiceManager {
     if (!service) return null;
 
     let status: ServiceStatus = "unknown";
-    let metrics: ContainerMetrics = { available: false };
+    let metrics: ContainerMetrics = {
+      available: false,
+      reason: "Container is not running",
+    };
 
     if (this.dockerClient && service.integration === "docker") {
       try {
@@ -107,10 +110,18 @@ export class ServiceManager {
             available: true,
             ...rawMetrics,
           };
+        } else if (status !== "running") {
+          metrics = {
+            available: false,
+            reason: "Container is not running",
+          };
         }
       } catch {
         status = "unknown";
-        metrics = { available: false };
+        metrics = {
+          available: false,
+          reason: "Docker unreachable",
+        };
       }
     }
 
