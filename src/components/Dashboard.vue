@@ -60,12 +60,17 @@
       <div v-else class="metrics-notice">
         <em>Metrics unavailable: {{ selectedService.metrics?.reason || 'No metrics' }}</em>
       </div>
+
+      <h4>Container Logs</h4>
+      <ServiceLogs :logs="logs" @filter-change="(f) => emit('filterLogs', f)" />
     </aside>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from "vue";
+import ServiceLogs from "./ServiceLogs.vue";
+import type { LogEntry, LogLevel } from "../interfaces/service.ts";
 
 export interface ServiceItem {
   id: string;
@@ -95,17 +100,20 @@ const props = withDefaults(
     summary?: Summary;
     integrationStatus?: { docker?: string };
     services?: ServiceItem[];
+    logs?: LogEntry[];
   }>(),
   {
     summary: () => ({ total: 0, online: 0, unhealthy: 0 }),
     integrationStatus: () => ({ docker: "available" }),
     services: () => [],
+    logs: () => [],
   }
 );
 
 const emit = defineEmits<{
   (e: "registerService", payload: { name: string; externalId: string; integration: string }): void;
   (e: "selectService", service: ServiceItem): void;
+  (e: "filterLogs", filters: { query: string; level?: LogLevel }): void;
 }>();
 
 const form = ref({

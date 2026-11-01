@@ -4,8 +4,10 @@
       :summary="data.summary"
       :integration-status="data.integrationStatus"
       :services="data.services"
+      :logs="activeLogs"
       @register-service="handleRegister"
       @select-service="handleSelectService"
+      @filter-logs="handleFilterLogs"
     />
   </main>
 </template>
@@ -13,6 +15,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 import Dashboard, { type Summary, type ServiceItem } from "./components/Dashboard.vue";
+import type { LogEntry, LogLevel } from "./interfaces/service.ts";
 
 const data = ref<{
   summary: Summary;
@@ -23,6 +26,9 @@ const data = ref<{
   integrationStatus: { docker: "available" },
   services: [],
 });
+
+const activeLogs = ref<LogEntry[]>([]);
+const currentSelectedId = ref<string | null>(null);
 
 async function loadServices() {
   try {
@@ -51,6 +57,7 @@ async function handleRegister(payload: { name: string; externalId: string; integ
 }
 
 async function handleSelectService(service: ServiceItem) {
+  currentSelectedId.value = service.id;
   try {
     const res = await fetch(`/api/services/${service.id}`);
     if (res.ok) {
@@ -60,8 +67,32 @@ async function handleSelectService(service: ServiceItem) {
         data.value.services[idx] = detailed;
       }
     }
+
+    await fetchLogs(service.id);
   } catch (error) {
     console.error("Failed to fetch service details", error);
+  }
+}
+
+async function fetchLogs(serviceId: string, filters?: { query?: string; level?: LogLevel }) {
+  try {
+    const params = new URLSearchParams();
+    if (filters?.query) params.append("query", filters.query);
+    if (filters?.level) params.append("level", filters.level);
+
+    const res = await fetch(`/api/services/${serviceId}/logs?${params.toString()}`);
+    if (res.ok) {
+      const logData = await res.json();
+      activeLogs.value = logData.entries || [];
+    }
+  } catch (error) {
+    console.error("Failed to fetch logs", error);
+  }
+}
+
+async function handleFilterLogs(filters: { query: string; level?: LogLevel }) {
+  if (currentSelectedId.value) {
+    await fetchLogs(currentSelectedId.value, filters);
   }
 }
 
