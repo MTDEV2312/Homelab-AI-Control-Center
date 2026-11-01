@@ -1,29 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import crypto from "node:crypto";
-
-export type ServiceStatus = "running" | "stopped" | "unhealthy" | "unknown";
-export type IntegrationHealth = "available" | "unavailable";
-
-export interface ContainerMetrics {
-  available: boolean;
-  cpuPercent?: number;
-  memoryUsedBytes?: number;
-  memoryLimitBytes?: number;
-  uptimeSeconds?: number;
-}
-
-export interface DockerClient {
-  getContainerStatus(containerId: string): Promise<ServiceStatus>;
-  getContainerMetrics?(containerId: string): Promise<Omit<ContainerMetrics, "available">>;
-}
-
-export interface Service {
-  id: string;
-  name: string;
-  externalId: string;
-  integration: string;
-  createdAt: string;
-}
+import type {
+  Service,
+  ServiceStatus,
+  IntegrationHealth,
+  ContainerMetrics,
+  DockerClient,
+} from "../interfaces/service.ts";
 
 export interface ServicesRouteOptions {
   services: Service[];

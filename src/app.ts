@@ -1,13 +1,20 @@
 import Fastify from "fastify";
-import {
-  registerServicesRoutes,
-  type DockerClient,
-  type Service,
-  type ServiceStatus,
-  type IntegrationHealth,
-} from "./routes/services.ts";
+import { registerServicesRoutes } from "./routes/services.ts";
+import type {
+  DockerClient,
+  Service,
+  ServiceStatus,
+  IntegrationHealth,
+  ContainerMetrics,
+} from "./interfaces/service.ts";
 
-export type { DockerClient, Service, ServiceStatus, IntegrationHealth };
+export type {
+  DockerClient,
+  Service,
+  ServiceStatus,
+  IntegrationHealth,
+  ContainerMetrics,
+};
 
 export interface AppOptions {
   dockerClient?: DockerClient;
