@@ -147,6 +147,26 @@ export class ServiceManager {
       }
     }
 
+    if (options) {
+      if (options.level) {
+        entries = entries.filter((e) => e.level === options.level);
+      }
+      if (options.query) {
+        const q = options.query.toLowerCase();
+        entries = entries.filter((e) => e.message.toLowerCase().includes(q));
+      }
+      if (options.since) {
+        const sinceTime = new Date(options.since).getTime();
+        entries = entries.filter((e) => new Date(e.timestamp).getTime() >= sinceTime);
+      }
+      if (options.limit !== undefined) {
+        const lim = Number(options.limit);
+        if (!isNaN(lim) && lim > 0) {
+          entries = entries.slice(0, lim);
+        }
+      }
+    }
+
     return {
       serviceId: service.id,
       entries,

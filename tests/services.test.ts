@@ -244,4 +244,57 @@ describe("GET /api/services/:id/logs", () => {
       message: "High memory usage detected",
     });
   });
+
+  it("filters entries by text query, level, and since timestamp, respecting limit", async () => {
+    const rawLogs = [
+      {
+        timestamp: "2026-10-31T20:00:00.000Z",
+        level: "info" as const,
+        message: "Database connected",
+      },
+      {
+        timestamp: "2026-10-31T21:00:00.000Z",
+        level: "warn" as const,
+        message: "Disk buffer low",
+      },
+      {
+        timestamp: "2026-10-31T21:30:00.000Z",
+        level: "error" as const,
+        message: "Disk write failed",
+      },
+      {
+        timestamp: "2026-10-31T21:45:00.000Z",
+        level: "error" as const,
+        message: "Connection timeout to redis",
+      },
+    ];
+
+    const mockDocker = {
+      getContainerStatus: async () => "running" as const,
+      getContainerLogs: async () => rawLogs,
+    };
+
+    const app = buildApp({ dockerClient: mockDocker });
+
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "jellyfin", externalId: "jellyfin-c", integration: "docker" },
+    });
+    const created = createRes.json();
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/services/${created.id}/logs?query=disk&level=error&since=2026-10-31T21:00:00.000Z&limit=1`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.entries).toHaveLength(1);
+    expect(body.entries[0]).toEqual({
+      timestamp: "2026-10-31T21:30:00.000Z",
+      level: "error",
+      message: "Disk write failed",
+    });
+  });
 });
