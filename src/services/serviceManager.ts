@@ -29,6 +29,14 @@ export interface ServiceDetailResult extends Service {
   metrics: ContainerMetrics;
 }
 
+function redactLogMessage(message: string): string {
+  return message
+    .replace(/(Bearer\s+)[^\s]+/gi, "$1[REDACTED]")
+    .replace(/(password=)[^&\s]+/gi, "$1[REDACTED]")
+    .replace(/(api_key=)[^&\s]+/gi, "$1[REDACTED]")
+    .replace(/(token=)[^&\s]+/gi, "$1[REDACTED]");
+}
+
 export class ServiceManager {
   private services: Service[] = [];
   private dockerClient?: DockerClient;
@@ -166,6 +174,11 @@ export class ServiceManager {
         }
       }
     }
+
+    entries = entries.map((entry) => ({
+      ...entry,
+      message: redactLogMessage(entry.message),
+    }));
 
     return {
       serviceId: service.id,

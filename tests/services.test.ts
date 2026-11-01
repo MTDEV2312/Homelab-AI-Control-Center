@@ -297,4 +297,49 @@ describe("GET /api/services/:id/logs", () => {
       message: "Disk write failed",
     });
   });
+
+  it("redacts sensitive data (tokens, keys, passwords) in log messages", async () => {
+    const rawLogs = [
+      {
+        timestamp: "2026-10-31T22:00:00.000Z",
+        level: "info" as const,
+        message: "Auth header received: Bearer abc123secretToken",
+      },
+      {
+        timestamp: "2026-10-31T22:01:00.000Z",
+        level: "warn" as const,
+        message: "Connecting with password=superSecretPassword&user=admin",
+      },
+      {
+        timestamp: "2026-10-31T22:02:00.000Z",
+        level: "error" as const,
+        message: "Invalid api_key=key_999999",
+      },
+    ];
+
+    const mockDocker = {
+      getContainerStatus: async () => "running" as const,
+      getContainerLogs: async () => rawLogs,
+    };
+
+    const app = buildApp({ dockerClient: mockDocker });
+
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "jellyfin", externalId: "jellyfin-c", integration: "docker" },
+    });
+    const created = createRes.json();
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/services/${created.id}/logs`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.entries[0].message).toBe("Auth header received: Bearer [REDACTED]");
+    expect(body.entries[1].message).toBe("Connecting with password=[REDACTED]&user=admin");
+    expect(body.entries[2].message).toBe("Invalid api_key=[REDACTED]");
+  });
 });
