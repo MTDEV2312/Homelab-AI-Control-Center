@@ -34,7 +34,7 @@ export interface ServiceDetailResult extends Service {
   healthCheck?: HealthCheckResult;
 }
 
-function redactLogMessage(message: string): string {
+export function redactLogMessage(message: string): string {
   return message
     .replace(/(Bearer\s+)[^\s]+/gi, "$1[REDACTED]")
     .replace(/(password=)[^&\s]+/gi, "$1[REDACTED]")

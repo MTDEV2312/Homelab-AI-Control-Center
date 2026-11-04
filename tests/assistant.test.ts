@@ -78,4 +78,74 @@ describe("POST /api/assistant/diagnose", () => {
     expect(body.diagnosis.evidence).toContain("CPU usage reported at 94.5%");
     expect(body.diagnosis.recommendations).toContain("Check hardware acceleration or throttle concurrent streams");
   });
+
+  it("preserves log redaction in tool trace and generated findings", async () => {
+    let targetServiceId = "";
+
+    const mockLlm: LlmProvider = {
+      chat: async ({ step }) => {
+        if (step === 0) {
+          return {
+            toolCall: {
+              tool: "search_logs",
+              parameters: { service_id: targetServiceId, query: "secret" },
+            },
+          };
+        }
+        return {
+          diagnosis: {
+            facts: ["Found auth error with token=raw_secret_leak_456 in log"],
+            hypotheses: ["Service rejected authorization token"],
+            evidence: ["Log entry contains password=mypassword123 in body"],
+            recommendations: ["Rotate compromised credentials immediately"],
+          },
+        };
+      },
+    };
+
+    const mockDocker = {
+      getContainerStatus: async () => "running" as const,
+      getContainerLogs: async () => [
+        {
+          timestamp: "2026-11-04T12:00:00Z",
+          message: "Failed login attempt with password=mypassword123 and token=raw_secret_leak_456",
+          level: "error" as const,
+        },
+      ],
+    };
+
+    const app = buildApp({ dockerClient: mockDocker, llmProvider: mockLlm });
+
+    const regRes = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "auth-svc", externalId: "auth-ctr", integration: "docker" },
+    });
+    targetServiceId = regRes.json().id;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/assistant/diagnose",
+      payload: {
+        query: "Check for auth errors in auth-svc",
+        serviceId: targetServiceId,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+
+    // Verify tool trace redaction
+    const logEntry = body.toolTraces[0].result.entries[0];
+    expect(logEntry.message).toContain("password=[REDACTED]");
+    expect(logEntry.message).toContain("token=[REDACTED]");
+    expect(logEntry.message).not.toContain("mypassword123");
+    expect(logEntry.message).not.toContain("raw_secret_leak_456");
+
+    // Verify findings redaction
+    expect(body.diagnosis.facts[0]).toContain("token=[REDACTED]");
+    expect(body.diagnosis.facts[0]).not.toContain("raw_secret_leak_456");
+    expect(body.diagnosis.evidence[0]).toContain("password=[REDACTED]");
+    expect(body.diagnosis.evidence[0]).not.toContain("mypassword123");
+  });
 });

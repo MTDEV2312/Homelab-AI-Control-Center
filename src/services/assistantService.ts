@@ -1,4 +1,5 @@
 import type { ToolService } from "./toolService.ts";
+import { redactLogMessage } from "./serviceManager.ts";
 import type {
   LlmProvider,
   DiagnosticRequest,
@@ -11,6 +12,15 @@ export interface AssistantServiceOptions {
   toolService: ToolService;
   llmProvider?: LlmProvider;
   maxIterations?: number;
+}
+
+function redactDiagnosis(diagnosis: StructuredDiagnosis): StructuredDiagnosis {
+  return {
+    facts: (diagnosis.facts || []).map(redactLogMessage),
+    hypotheses: (diagnosis.hypotheses || []).map(redactLogMessage),
+    evidence: (diagnosis.evidence || []).map(redactLogMessage),
+    recommendations: (diagnosis.recommendations || []).map(redactLogMessage),
+  };
 }
 
 export class AssistantService {
@@ -72,7 +82,7 @@ export class AssistantService {
     return {
       query: request.query,
       toolTraces,
-      diagnosis: finalDiagnosis,
+      diagnosis: redactDiagnosis(finalDiagnosis),
     };
   }
 }
