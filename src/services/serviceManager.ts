@@ -23,6 +23,8 @@ export interface ServicesListResult {
   services: (Service & {
     status: ServiceStatus;
     lastCheckedAt: string;
+    consecutiveFailures?: number;
+    healthCheck?: HealthCheckResult;
   })[];
 }
 
@@ -81,12 +83,28 @@ export class ServiceManager {
           }
         }
 
+        const checks = this.healthChecks.get(service.id) || [];
+        let consecutiveFailures = 0;
+        for (let i = checks.length - 1; i >= 0; i--) {
+          if (checks[i].status === "unhealthy") {
+            consecutiveFailures++;
+          } else {
+            break;
+          }
+        }
+
+        if (consecutiveFailures > 0 && status === "running") {
+          status = "unhealthy";
+        }
+
         if (status === "running") online++;
         if (status === "unhealthy") unhealthy++;
 
         return {
           ...service,
           status,
+          consecutiveFailures,
+          healthCheck: checks.slice(-1)[0],
           lastCheckedAt: new Date().toISOString(),
         };
       })

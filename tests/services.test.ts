@@ -118,6 +118,59 @@ describe("GET /api/services", () => {
       unhealthy: 0,
     });
   });
+
+  it("reflects consecutive health check failures and marks service unhealthy in summary count", async () => {
+    const mockDocker = {
+      getContainerStatus: async () => "running" as const,
+      checkHealth: async () => ({
+        status: "unhealthy" as const,
+        latencyMs: 150,
+        errorCode: "HTTP_500",
+      }),
+    };
+
+    const app = buildApp({ dockerClient: mockDocker });
+
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "srv-failing", externalId: "c-fail", integration: "docker" },
+    });
+    const created = createRes.json();
+
+    await app.inject({
+      method: "POST",
+      url: `/api/services/${created.id}/health-check`,
+    });
+    await app.inject({
+      method: "POST",
+      url: `/api/services/${created.id}/health-check`,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/services",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+
+    expect(body.summary).toEqual({
+      total: 1,
+      online: 0,
+      unhealthy: 1,
+    });
+
+    expect(body.services[0]).toMatchObject({
+      name: "srv-failing",
+      status: "unhealthy",
+      consecutiveFailures: 2,
+    });
+    expect(body.services[0].healthCheck).toMatchObject({
+      status: "unhealthy",
+      errorCode: "HTTP_500",
+    });
+  });
 });
 
 describe("GET /api/services/:id", () => {
