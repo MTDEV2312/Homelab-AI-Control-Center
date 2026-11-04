@@ -27,7 +27,14 @@ export function registerAssistantRoutes(
       return reply.status(200).send(response);
     } catch (err: any) {
       const message = err?.message || "Assistant error";
-      const status = message.toLowerCase().includes("provider") || message.toLowerCase().includes("unavailable") ? 503 : 500;
+      const isProviderFailure =
+        message.toLowerCase().includes("provider") ||
+        message.toLowerCase().includes("unavailable") ||
+        message.toLowerCase().includes("connection") ||
+        message.toLowerCase().includes("ollama") ||
+        message.toLowerCase().includes("timeout") ||
+        message.toLowerCase().includes("refused");
+      const status = isProviderFailure ? 503 : 500;
       return reply.status(status).send({ error: message });
     }
   });

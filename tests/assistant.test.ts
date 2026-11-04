@@ -148,4 +148,31 @@ describe("POST /api/assistant/diagnose", () => {
     expect(body.diagnosis.evidence[0]).toContain("password=[REDACTED]");
     expect(body.diagnosis.evidence[0]).not.toContain("mypassword123");
   });
+
+  it("returns 503 error when LLM provider is unavailable or fails", async () => {
+    // Subcase 1: Provider not configured
+    const appWithoutLlm = buildApp();
+    const resNoLlm = await appWithoutLlm.inject({
+      method: "POST",
+      url: "/api/assistant/diagnose",
+      payload: { query: "What is wrong with jellyfin?" },
+    });
+    expect(resNoLlm.statusCode).toBe(503);
+    expect(resNoLlm.json().error).toContain("unavailable");
+
+    // Subcase 2: Provider fails with network / connection error
+    const failingLlm: LlmProvider = {
+      chat: async () => {
+        throw new Error("Connection refused to Ollama service on port 11434");
+      },
+    };
+    const appWithFailingLlm = buildApp({ llmProvider: failingLlm });
+    const resFailedLlm = await appWithFailingLlm.inject({
+      method: "POST",
+      url: "/api/assistant/diagnose",
+      payload: { query: "Why is the container stopped?" },
+    });
+    expect(resFailedLlm.statusCode).toBe(503);
+    expect(resFailedLlm.json().error).toContain("Connection refused to Ollama");
+  });
 });
