@@ -189,3 +189,88 @@ describe("POST /api/operations/:id/confirm", () => {
   });
 });
 
+describe("GET /api/audit", () => {
+  it("returns chronological audit trail filtered or scoped to service operations", async () => {
+    const mockDocker = {
+      getContainerStatus: async () => "running" as const,
+      executeContainerAction: async () => {},
+    };
+
+    const app = buildApp({ dockerClient: mockDocker });
+
+    const s1Res = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "service-1", externalId: "c-1", integration: "docker" },
+    });
+    const s1 = s1Res.json();
+
+    const s2Res = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "service-2", externalId: "c-2", integration: "docker" },
+    });
+    const s2 = s2Res.json();
+
+    const req1 = await app.inject({
+      method: "POST",
+      url: "/api/operations/request",
+      payload: { serviceId: s1.id, action: "restart" },
+    });
+    const op1 = req1.json().operation;
+    await app.inject({
+      method: "POST",
+      url: `/api/operations/${op1.id}/confirm`,
+      payload: { confirmationToken: op1.confirmationToken },
+    });
+
+    const req2 = await app.inject({
+      method: "POST",
+      url: "/api/operations/request",
+      payload: { serviceId: s2.id, action: "stop" },
+    });
+    const op2 = req2.json().operation;
+    await app.inject({
+      method: "POST",
+      url: `/api/operations/${op2.id}/confirm`,
+      payload: { confirmationToken: "wrong-token" },
+    });
+
+    const req3 = await app.inject({
+      method: "POST",
+      url: "/api/operations/request",
+      payload: { serviceId: s1.id, action: "stop" },
+    });
+    const op3 = req3.json().operation;
+    await app.inject({
+      method: "POST",
+      url: `/api/operations/${op3.id}/confirm`,
+      payload: { confirmationToken: op3.confirmationToken },
+    });
+
+    const allAuditRes = await app.inject({
+      method: "GET",
+      url: "/api/audit",
+    });
+    expect(allAuditRes.statusCode).toBe(200);
+    const allEntries = allAuditRes.json();
+    expect(allEntries).toHaveLength(3);
+    expect(allEntries[0].serviceId).toBe(s1.id);
+    expect(allEntries[0].action).toBe("restart");
+    expect(allEntries[1].serviceId).toBe(s2.id);
+    expect(allEntries[1].outcome).toBe("rejected");
+    expect(allEntries[2].serviceId).toBe(s1.id);
+    expect(allEntries[2].action).toBe("stop");
+
+    const s1AuditRes = await app.inject({
+      method: "GET",
+      url: `/api/audit?serviceId=${s1.id}`,
+    });
+    expect(s1AuditRes.statusCode).toBe(200);
+    const s1Entries = s1AuditRes.json();
+    expect(s1Entries).toHaveLength(2);
+    expect(s1Entries.every((e: any) => e.serviceId === s1.id)).toBe(true);
+  });
+});
+
+

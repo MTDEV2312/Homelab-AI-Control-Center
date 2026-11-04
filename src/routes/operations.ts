@@ -49,4 +49,12 @@ export function registerOperationsRoutes(
 
     return reply.status(200).send(result);
   });
+
+  app.get<{
+    Querystring: {
+      serviceId?: string;
+    };
+  }>("/api/audit", async (request) => {
+    return operationService.getAuditLog(request.query);
+  });
 }

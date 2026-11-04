@@ -138,7 +138,10 @@ export class OperationService {
     };
   }
 
-  getAuditLog(): AuditEntry[] {
+  getAuditLog(options?: { serviceId?: string }): AuditEntry[] {
+    if (options?.serviceId) {
+      return this.auditEntries.filter((e) => e.serviceId === options.serviceId);
+    }
     return [...this.auditEntries];
   }
 }
