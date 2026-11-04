@@ -1,7 +1,15 @@
 <template>
   <div class="dashboard">
-    <header>
-      <h1>Homelab Control Center</h1>
+    <header class="dashboard-header">
+      <div class="header-main">
+        <h1>Homelab Control Center</h1>
+        <span
+          class="webmcp-status"
+          :class="{ active: webmcpStatus?.supported, inactive: !webmcpStatus?.supported }"
+        >
+          {{ webmcpStatus?.supported ? `WebMCP Active (${webmcpStatus.registeredCount} tools)` : 'WebMCP Unavailable' }}
+        </span>
+      </div>
       <div v-if="integrationStatus.docker === 'unavailable'" class="banner warning">
         Docker Integration Unavailable
       </div>
@@ -108,6 +116,11 @@ export interface Summary {
   unhealthy: number;
 }
 
+export interface WebMcpStatus {
+  supported: boolean;
+  registeredCount: number;
+}
+
 const props = withDefaults(
   defineProps<{
     summary?: Summary;
@@ -115,6 +128,7 @@ const props = withDefaults(
     services?: ServiceItem[];
     logs?: LogEntry[];
     healthHistory?: HealthCheckResult[];
+    webmcpStatus?: WebMcpStatus;
   }>(),
   {
     summary: () => ({ total: 0, online: 0, unhealthy: 0 }),
@@ -122,6 +136,7 @@ const props = withDefaults(
     services: () => [],
     logs: () => [],
     healthHistory: () => [],
+    webmcpStatus: () => ({ supported: false, registeredCount: 0 }),
   }
 );
 

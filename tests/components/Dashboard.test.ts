@@ -94,4 +94,24 @@ describe("Dashboard component", () => {
     await detailPanel.find(".close-btn").trigger("click");
     expect(wrapper.find(".service-detail-panel").exists()).toBe(false);
   });
+
+  it("renders WebMCP status badge and tolerates missing browser support", async () => {
+    const wrapperSupported = mount(Dashboard, {
+      props: {
+        webmcpStatus: { supported: true, registeredCount: 3 },
+      },
+    });
+
+    expect(wrapperSupported.find(".webmcp-status").exists()).toBe(true);
+    expect(wrapperSupported.find(".webmcp-status").text()).toContain("WebMCP Active (3 tools)");
+
+    const wrapperUnsupported = mount(Dashboard, {
+      props: {
+        webmcpStatus: { supported: false, registeredCount: 0 },
+      },
+    });
+
+    expect(wrapperUnsupported.find(".webmcp-status").exists()).toBe(true);
+    expect(wrapperUnsupported.find(".webmcp-status").text()).toContain("WebMCP Unavailable");
+  });
 });

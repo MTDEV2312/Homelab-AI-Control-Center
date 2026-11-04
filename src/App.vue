@@ -6,6 +6,7 @@
       :services="data.services"
       :logs="activeLogs"
       :health-history="activeHealthHistory"
+      :webmcp-status="webmcpStatus"
       @register-service="handleRegister"
       @select-service="handleSelectService"
       @filter-logs="handleFilterLogs"
@@ -16,7 +17,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import Dashboard, { type Summary, type ServiceItem } from "./components/Dashboard.vue";
+import Dashboard, { type Summary, type ServiceItem, type WebMcpStatus } from "./components/Dashboard.vue";
+import { registerWebMcpTools } from "./services/webmcp.ts";
 import type { LogEntry, LogLevel, HealthCheckResult } from "./interfaces/service.ts";
 
 const data = ref<{
@@ -29,9 +31,30 @@ const data = ref<{
   services: [],
 });
 
+const webmcpStatus = ref<WebMcpStatus>({
+  supported: false,
+  registeredCount: 0,
+});
+
 const activeLogs = ref<LogEntry[]>([]);
 const activeHealthHistory = ref<HealthCheckResult[]>([]);
 const currentSelectedId = ref<string | null>(null);
+
+async function initWebMcp() {
+  try {
+    const res = await fetch("/api/tools");
+    if (res.ok) {
+      const { tools } = await res.json();
+      const result = await registerWebMcpTools({ tools });
+      webmcpStatus.value = {
+        supported: result.supported,
+        registeredCount: result.registeredTools.length,
+      };
+    }
+  } catch (error) {
+    console.warn("Failed to initialize WebMCP tools", error);
+  }
+}
 
 async function loadServices() {
   try {
@@ -132,6 +155,7 @@ async function handleFilterLogs(filters: { query: string; level?: LogLevel }) {
 
 onMounted(() => {
   loadServices();
+  initWebMcp();
 });
 </script>
 
@@ -146,6 +170,27 @@ body {
   max-width: 900px;
   margin: 0 auto;
   padding: 2rem 1rem;
+}
+.header-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.webmcp-status {
+  padding: 0.3rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.webmcp-status.active {
+  background: #064e3b;
+  color: #6ee7b7;
+  border: 1px solid #059669;
+}
+.webmcp-status.inactive {
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid #334155;
 }
 .summary-cards {
   display: flex;
