@@ -105,6 +105,7 @@ describe("POST /api/tools/execute", () => {
 
   it("runs search_logs and returns redacted logs", async () => {
     const mockDocker = {
+      getContainerStatus: async () => "running" as const,
       getContainerLogs: async () => [
         { timestamp: "2026-11-03T10:00:00Z", message: "Starting server with Bearer secret_token_123", level: "info" as const },
         { timestamp: "2026-11-03T10:01:00Z", message: "Database connection failed", level: "error" as const },
