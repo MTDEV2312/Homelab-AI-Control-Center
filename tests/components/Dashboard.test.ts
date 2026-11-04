@@ -138,4 +138,43 @@ describe("Dashboard component", () => {
     expect(wrapper.emitted("askAiAssistant")).toBeTruthy();
     expect(wrapper.emitted("askAiAssistant")?.[0]).toEqual(["Why is vaultwarden locked?", "srv-1"]);
   });
+
+  it("embeds ServiceOperations and renders audit trail in service drawer", async () => {
+    const wrapper = mount(Dashboard, {
+      props: {
+        services: [
+          {
+            id: "srv-1",
+            name: "vaultwarden",
+            externalId: "vw-ctr",
+            integration: "docker",
+            status: "running",
+          },
+        ],
+        auditLog: [
+          {
+            id: "aud-1",
+            actor: "admin",
+            action: "restart",
+            riskLevel: "L2",
+            serviceId: "srv-1",
+            outcome: "success",
+            timestamp: "2026-11-04T12:00:00Z",
+          },
+        ],
+      },
+    });
+
+    await wrapper.find(".service-item").trigger("click");
+    const operationsComp = wrapper.findComponent({ name: "ServiceOperations" });
+    expect(operationsComp.exists()).toBe(true);
+
+    await operationsComp.vm.$emit("requestAction", "restart", "srv-1");
+    expect(wrapper.emitted("requestAction")).toBeTruthy();
+    expect(wrapper.emitted("requestAction")?.[0]).toEqual(["restart", "srv-1"]);
+
+    await operationsComp.vm.$emit("confirmOperation", "op-1", "token-1");
+    expect(wrapper.emitted("confirmOperation")).toBeTruthy();
+    expect(wrapper.emitted("confirmOperation")?.[0]).toEqual(["op-1", "token-1"]);
+  });
 });

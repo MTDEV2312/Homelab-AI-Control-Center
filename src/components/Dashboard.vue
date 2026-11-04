@@ -90,6 +90,20 @@
         :error="assistantError"
         @ask="(q, id) => emit('askAiAssistant', q, id)"
       />
+
+      <ServiceOperations
+        :service-id="selectedService.id"
+        :service-name="selectedService.name"
+        :status="selectedService.status"
+        :allowed-actions="selectedService.allowedActions"
+        :pending-operation="pendingOperation"
+        :audit-log="auditLog"
+        :is-loading="operationsLoading"
+        :error="operationsError"
+        @request-action="(a, id) => emit('requestAction', a, id)"
+        @confirm-operation="(id, t) => emit('confirmOperation', id, t)"
+        @cancel-operation="() => emit('cancelOperation')"
+      />
     </aside>
   </div>
 </template>
@@ -99,8 +113,10 @@ import { ref, computed } from "vue";
 import ServiceLogs from "./ServiceLogs.vue";
 import ServiceHealth from "./ServiceHealth.vue";
 import AiAssistant from "./AiAssistant.vue";
+import ServiceOperations from "./ServiceOperations.vue";
 import type { LogEntry, LogLevel, HealthCheckResult } from "../interfaces/service.ts";
 import type { DiagnosticResponse } from "../interfaces/assistant.ts";
+import type { OperationAction, PendingOperation, AuditEntry } from "../interfaces/operation.ts";
 
 export interface ServiceItem {
   id: string;
@@ -108,6 +124,7 @@ export interface ServiceItem {
   externalId: string;
   integration: string;
   status: "running" | "stopped" | "unhealthy" | "unknown";
+  allowedActions?: OperationAction[];
   lastCheckedAt?: string;
   consecutiveFailures?: number;
   healthCheck?: HealthCheckResult;
@@ -143,6 +160,10 @@ const props = withDefaults(
     assistantResponse?: DiagnosticResponse | null;
     assistantLoading?: boolean;
     assistantError?: string | null;
+    pendingOperation?: PendingOperation | null;
+    auditLog?: AuditEntry[];
+    operationsLoading?: boolean;
+    operationsError?: string | null;
   }>(),
   {
     summary: () => ({ total: 0, online: 0, unhealthy: 0 }),
@@ -154,6 +175,10 @@ const props = withDefaults(
     assistantResponse: null,
     assistantLoading: false,
     assistantError: null,
+    pendingOperation: null,
+    auditLog: () => [],
+    operationsLoading: false,
+    operationsError: null,
   }
 );
 
@@ -163,6 +188,9 @@ const emit = defineEmits<{
   (e: "filterLogs", filters: { query: string; level?: LogLevel }): void;
   (e: "runHealthCheck", serviceId: string): void;
   (e: "askAiAssistant", query: string, serviceId?: string): void;
+  (e: "requestAction", action: OperationAction, serviceId: string): void;
+  (e: "confirmOperation", operationId: string, token: string): void;
+  (e: "cancelOperation"): void;
 }>();
 
 const form = ref({

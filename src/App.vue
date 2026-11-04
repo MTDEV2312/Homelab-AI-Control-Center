@@ -10,11 +10,18 @@
       :assistant-response="assistantResponse"
       :assistant-loading="assistantLoading"
       :assistant-error="assistantError"
+      :pending-operation="pendingOperation"
+      :audit-log="activeAuditLog"
+      :operations-loading="operationsLoading"
+      :operations-error="operationsError"
       @register-service="handleRegister"
       @select-service="handleSelectService"
       @filter-logs="handleFilterLogs"
       @run-health-check="handleRunHealthCheck"
       @ask-ai-assistant="handleAskAiAssistant"
+      @request-action="handleRequestAction"
+      @confirm-operation="handleConfirmOperation"
+      @cancel-operation="handleCancelOperation"
     />
   </main>
 </template>
@@ -25,6 +32,7 @@ import Dashboard, { type Summary, type ServiceItem, type WebMcpStatus } from "./
 import { registerWebMcpTools } from "./services/webmcp.ts";
 import type { LogEntry, LogLevel, HealthCheckResult } from "./interfaces/service.ts";
 import type { DiagnosticResponse } from "./interfaces/assistant.ts";
+import type { OperationAction, PendingOperation, AuditEntry } from "./interfaces/operation.ts";
 
 const data = ref<{
   summary: Summary;
@@ -48,6 +56,74 @@ const currentSelectedId = ref<string | null>(null);
 const assistantResponse = ref<DiagnosticResponse | null>(null);
 const assistantLoading = ref(false);
 const assistantError = ref<string | null>(null);
+
+const pendingOperation = ref<PendingOperation | null>(null);
+const activeAuditLog = ref<AuditEntry[]>([]);
+const operationsLoading = ref(false);
+const operationsError = ref<string | null>(null);
+
+async function fetchAuditLog(serviceId?: string) {
+  try {
+    const url = serviceId ? `/api/audit?serviceId=${serviceId}` : "/api/audit";
+    const res = await fetch(url);
+    if (res.ok) {
+      activeAuditLog.value = await res.json();
+    }
+  } catch (error) {
+    console.error("Failed to fetch audit log", error);
+  }
+}
+
+async function handleRequestAction(action: OperationAction, serviceId: string) {
+  operationsLoading.value = true;
+  operationsError.value = null;
+  try {
+    const res = await fetch("/api/operations/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ serviceId, action }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || "Failed to request operation");
+    }
+    pendingOperation.value = data.operation;
+  } catch (err: any) {
+    operationsError.value = err?.message || "Operation request failed";
+  } finally {
+    operationsLoading.value = false;
+  }
+}
+
+async function handleConfirmOperation(operationId: string, confirmationToken: string) {
+  operationsLoading.value = true;
+  operationsError.value = null;
+  try {
+    const res = await fetch(`/api/operations/${operationId}/confirm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmationToken }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || "Failed to confirm operation");
+    }
+    pendingOperation.value = null;
+    await loadServices();
+    if (currentSelectedId.value) {
+      await fetchAuditLog(currentSelectedId.value);
+    }
+  } catch (err: any) {
+    operationsError.value = err?.message || "Operation confirmation failed";
+  } finally {
+    operationsLoading.value = false;
+  }
+}
+
+function handleCancelOperation() {
+  pendingOperation.value = null;
+  operationsError.value = null;
+}
 
 async function handleAskAiAssistant(query: string, serviceId?: string) {
   assistantLoading.value = true;
@@ -138,6 +214,7 @@ async function handleSelectService(service: ServiceItem) {
 
     await fetchLogs(service.id);
     await fetchHealthHistory(service.id);
+    await fetchAuditLog(service.id);
   } catch (error) {
     console.error("Failed to fetch service details", error);
   }
