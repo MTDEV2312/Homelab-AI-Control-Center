@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { ServiceManager } from "../services/serviceManager.ts";
 import type { LogFilterOptions } from "../interfaces/service.ts";
+import type { OperationAction } from "../interfaces/operation.ts";
 
 export interface ServicesRouteOptions {
   serviceManager: ServiceManager;
@@ -13,7 +14,7 @@ export async function registerServicesRoutes(
   const { serviceManager } = options;
 
   app.post<{
-    Body: { name: string; externalId: string; integration: string };
+    Body: { name: string; externalId: string; integration: string; allowedActions?: OperationAction[] };
   }>("/api/services", async (request, reply) => {
     const created = await serviceManager.register(request.body);
     return reply.status(201).send(created);

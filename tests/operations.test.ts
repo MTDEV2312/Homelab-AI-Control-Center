@@ -113,5 +113,79 @@ describe("POST /api/operations/:id/confirm", () => {
     });
     expect(statusRes.json().status).toBe("running");
   });
+
+  it("rejects unconfirmed, reused confirmation, or unallowed service actions and records rejection in audit log", async () => {
+    let callCount = 0;
+    const mockDocker = {
+      getContainerStatus: async () => "running" as const,
+      executeContainerAction: async () => {
+        callCount++;
+      },
+    };
+
+    const app = buildApp({ dockerClient: mockDocker });
+
+    const srvRes = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "pihole", externalId: "pihole-ctr", integration: "docker" },
+    });
+    const service = srvRes.json();
+
+    const reqRes = await app.inject({
+      method: "POST",
+      url: "/api/operations/request",
+      payload: { serviceId: service.id, action: "restart" },
+    });
+    const { operation } = reqRes.json();
+
+    // 1. Wrong token rejected
+    const badTokenRes = await app.inject({
+      method: "POST",
+      url: `/api/operations/${operation.id}/confirm`,
+      payload: { confirmationToken: "invalid-token" },
+    });
+    expect(badTokenRes.statusCode).toBe(403);
+    expect(callCount).toBe(0);
+
+    // 2. Valid confirmation executes
+    const okConfirm = await app.inject({
+      method: "POST",
+      url: `/api/operations/${operation.id}/confirm`,
+      payload: { confirmationToken: operation.confirmationToken },
+    });
+    expect(okConfirm.statusCode).toBe(200);
+    expect(callCount).toBe(1);
+
+    // 3. Reused token rejected
+    const reusedRes = await app.inject({
+      method: "POST",
+      url: `/api/operations/${operation.id}/confirm`,
+      payload: { confirmationToken: operation.confirmationToken },
+    });
+    expect(reusedRes.statusCode).toBe(400);
+    expect(callCount).toBe(1);
+
+    // 4. Policy check: action not allowed for restricted service
+    const restrictedSrvRes = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: {
+        name: "cloudflared",
+        externalId: "cf-ctr",
+        integration: "docker",
+        allowedActions: ["restart"],
+      },
+    });
+    const restrictedService = restrictedSrvRes.json();
+
+    const unallowedActionRes = await app.inject({
+      method: "POST",
+      url: "/api/operations/request",
+      payload: { serviceId: restrictedService.id, action: "stop" },
+    });
+    expect(unallowedActionRes.statusCode).toBe(403);
+    expect(unallowedActionRes.json().error).toContain("Action stop is not permitted by policy");
+  });
 });
 

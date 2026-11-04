@@ -19,13 +19,41 @@ export class OperationService {
   async requestOperation(data: {
     serviceId: string;
     action: OperationAction;
-  }): Promise<PendingOperation | null> {
+    actor?: string;
+  }): Promise<
+    | { operation: PendingOperation }
+    | { error: string; code: number }
+  > {
+    const actor = data.actor || "admin";
+    if (!["start", "stop", "restart"].includes(data.action)) {
+      return { error: `Invalid action: ${data.action}`, code: 400 };
+    }
+
     const service = await this.serviceManager.getById(data.serviceId);
     if (!service) {
-      return null;
+      return { error: "Service not found", code: 404 };
     }
 
     const riskLevel: RiskLevel = data.action === "stop" ? "L3" : "L2";
+
+    if (service.allowedActions && !service.allowedActions.includes(data.action)) {
+      const rejectedAudit: AuditEntry = {
+        id: crypto.randomUUID(),
+        actor,
+        action: data.action,
+        riskLevel,
+        serviceId: data.serviceId,
+        outcome: "rejected",
+        timestamp: new Date().toISOString(),
+        details: `Action ${data.action} is not permitted by policy for service ${service.name}`,
+      };
+      this.auditEntries.push(rejectedAudit);
+      return {
+        error: `Action ${data.action} is not permitted by policy for service ${service.name}`,
+        code: 403,
+      };
+    }
+
     const id = crypto.randomUUID();
     const confirmationToken = crypto.randomBytes(16).toString("hex");
     const now = new Date();
@@ -43,7 +71,7 @@ export class OperationService {
     };
 
     this.pendingOperations.set(id, pending);
-    return pending;
+    return { operation: pending };
   }
 
   async confirmOperation(

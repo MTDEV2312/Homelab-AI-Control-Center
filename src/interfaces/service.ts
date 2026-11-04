@@ -1,3 +1,5 @@
+import type { OperationAction } from "./operation.ts";
+
 export type ServiceStatus = "running" | "stopped" | "unhealthy" | "unknown";
 export type IntegrationHealth = "available" | "unavailable";
 
@@ -49,5 +51,6 @@ export interface Service {
   name: string;
   externalId: string;
   integration: string;
+  allowedActions?: OperationAction[];
   createdAt: string;
 }

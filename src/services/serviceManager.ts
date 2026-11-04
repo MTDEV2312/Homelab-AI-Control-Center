@@ -10,6 +10,7 @@ import type {
   HealthStatus,
   HealthCheckResult,
 } from "../interfaces/service.ts";
+import type { OperationAction } from "../interfaces/operation.ts";
 
 export interface ServicesListResult {
   summary: {
@@ -54,12 +55,18 @@ export class ServiceManager {
     }
   }
 
-  async register(data: { name: string; externalId: string; integration: string }): Promise<Service> {
+  async register(data: {
+    name: string;
+    externalId: string;
+    integration: string;
+    allowedActions?: OperationAction[];
+  }): Promise<Service> {
     const newService: Service = {
       id: crypto.randomUUID(),
       name: data.name,
       externalId: data.externalId,
       integration: data.integration,
+      allowedActions: data.allowedActions,
       createdAt: new Date().toISOString(),
     };
     this.services.push(newService);

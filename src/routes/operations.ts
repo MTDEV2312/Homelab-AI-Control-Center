@@ -19,12 +19,12 @@ export function registerOperationsRoutes(
       return reply.status(400).send({ error: "Missing required fields: serviceId and action" });
     }
 
-    const pending = await operationService.requestOperation({ serviceId, action });
-    if (!pending) {
-      return reply.status(404).send({ error: "Service not found" });
+    const result = await operationService.requestOperation({ serviceId, action });
+    if ("error" in result) {
+      return reply.status(result.code).send({ error: result.error });
     }
 
-    return reply.status(201).send({ operation: pending });
+    return reply.status(201).send(result);
   });
 
   app.post<{
