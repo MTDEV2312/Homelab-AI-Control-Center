@@ -102,4 +102,41 @@ describe("POST /api/tools/execute", () => {
       uptimeSeconds: 3600,
     });
   });
+
+  it("runs search_logs and returns redacted logs", async () => {
+    const mockDocker = {
+      getContainerLogs: async () => [
+        { timestamp: "2026-11-03T10:00:00Z", message: "Starting server with Bearer secret_token_123", level: "info" as const },
+        { timestamp: "2026-11-03T10:01:00Z", message: "Database connection failed", level: "error" as const },
+      ],
+    };
+    const app = buildApp({ dockerClient: mockDocker });
+    const regRes = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "auth-svc", externalId: "auth-ctr", integration: "docker" },
+    });
+    const serviceId = regRes.json().id;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/tools/execute",
+      payload: {
+        tool: "search_logs",
+        parameters: {
+          service_id: serviceId,
+          query: "secret_token",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.tool).toBe("search_logs");
+    expect(body.result).toBeDefined();
+    expect(body.result.entries).toBeInstanceOf(Array);
+    expect(body.result.entries.length).toBe(1);
+    expect(body.result.entries[0].message).toContain("Bearer [REDACTED]");
+    expect(body.result.entries[0].message).not.toContain("secret_token_123");
+  });
 });

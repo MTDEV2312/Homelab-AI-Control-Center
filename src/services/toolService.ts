@@ -104,6 +104,22 @@ export class ToolService {
       return service;
     }
 
+    if (toolName === "search_logs") {
+      if (!parameters.service_id) {
+        throw new Error("Missing required parameter: service_id");
+      }
+      const logsResult = await this.serviceManager.getLogs(parameters.service_id, {
+        query: parameters.query,
+        level: parameters.level,
+        since: parameters.since,
+        limit: parameters.limit,
+      });
+      if (!logsResult) {
+        throw new Error(`Service not found: ${parameters.service_id}`);
+      }
+      return logsResult;
+    }
+
     throw new Error(`Unknown tool: ${toolName}`);
   }
 }
