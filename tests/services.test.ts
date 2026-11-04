@@ -343,3 +343,48 @@ describe("GET /api/services/:id/logs", () => {
     expect(body.entries[2].message).toBe("Invalid api_key=[REDACTED]");
   });
 });
+
+describe("POST /api/services/:id/health-check", () => {
+  it("executes check, records latency in ms, and updates service health status", async () => {
+    const mockDocker = {
+      getContainerStatus: async () => "running" as const,
+      checkHealth: async () => ({
+        status: "healthy" as const,
+        latencyMs: 42,
+      }),
+    };
+
+    const app = buildApp({ dockerClient: mockDocker });
+
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "jellyfin", externalId: "jellyfin-c", integration: "docker" },
+    });
+    const created = createRes.json();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/services/${created.id}/health-check`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body).toMatchObject({
+      serviceId: created.id,
+      status: "healthy",
+      latencyMs: 42,
+    });
+    expect(body.checkedAt).toBeDefined();
+
+    const getRes = await app.inject({
+      method: "GET",
+      url: `/api/services/${created.id}`,
+    });
+    const serviceBody = getRes.json();
+    expect(serviceBody.healthCheck).toMatchObject({
+      status: "healthy",
+      latencyMs: 42,
+    });
+  });
+});

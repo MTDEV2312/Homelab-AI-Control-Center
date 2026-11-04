@@ -41,4 +41,15 @@ export async function registerServicesRoutes(
       return result;
     }
   );
+
+  app.post<{ Params: { id: string } }>(
+    "/api/services/:id/health-check",
+    async (request, reply) => {
+      const result = await serviceManager.runHealthCheck(request.params.id);
+      if (!result) {
+        return reply.status(404).send({ message: "Service not found" });
+      }
+      return result;
+    }
+  );
 }

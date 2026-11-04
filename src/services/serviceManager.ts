@@ -7,6 +7,8 @@ import type {
   DockerClient,
   LogEntry,
   LogFilterOptions,
+  HealthStatus,
+  HealthCheckResult,
 } from "../interfaces/service.ts";
 
 export interface ServicesListResult {
@@ -27,6 +29,7 @@ export interface ServicesListResult {
 export interface ServiceDetailResult extends Service {
   status: ServiceStatus;
   metrics: ContainerMetrics;
+  healthCheck?: HealthCheckResult;
 }
 
 function redactLogMessage(message: string): string {
@@ -40,6 +43,7 @@ function redactLogMessage(message: string): string {
 export class ServiceManager {
   private services: Service[] = [];
   private dockerClient?: DockerClient;
+  private healthChecks: Map<string, HealthCheckResult[]> = new Map();
 
   constructor(options: { dockerClient?: DockerClient; initialServices?: Service[] } = {}) {
     this.dockerClient = options.dockerClient;
@@ -139,7 +143,44 @@ export class ServiceManager {
       ...service,
       status,
       metrics,
+      healthCheck: this.healthChecks.get(service.id)?.slice(-1)[0],
     };
+  }
+
+  async runHealthCheck(id: string): Promise<HealthCheckResult | null> {
+    const service = this.services.find((s) => s.id === id);
+    if (!service) return null;
+
+    let status: HealthStatus = "healthy";
+    let latencyMs = 0;
+    let errorCode: string | undefined;
+
+    if (this.dockerClient?.checkHealth && service.integration === "docker") {
+      try {
+        const res = await this.dockerClient.checkHealth(service.externalId);
+        status = res.status;
+        latencyMs = res.latencyMs;
+        errorCode = res.errorCode;
+      } catch (err: any) {
+        status = "unhealthy";
+        errorCode = err?.message || "CHECK_FAILED";
+      }
+    }
+
+    const check: HealthCheckResult = {
+      id: crypto.randomUUID(),
+      serviceId: service.id,
+      status,
+      latencyMs,
+      checkedAt: new Date().toISOString(),
+      errorCode,
+    };
+
+    const history = this.healthChecks.get(service.id) || [];
+    history.push(check);
+    this.healthChecks.set(service.id, history);
+
+    return check;
   }
 
   async getLogs(id: string, options?: LogFilterOptions): Promise<{ serviceId: string; entries: LogEntry[] } | null> {
