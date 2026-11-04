@@ -2,9 +2,11 @@ import Fastify from "fastify";
 import { registerServicesRoutes } from "./routes/services.ts";
 import { registerToolsRoutes } from "./routes/tools.ts";
 import { registerAssistantRoutes } from "./routes/assistant.ts";
+import { registerOperationsRoutes } from "./routes/operations.ts";
 import { ServiceManager } from "./services/serviceManager.ts";
 import { ToolService } from "./services/toolService.ts";
 import { AssistantService } from "./services/assistantService.ts";
+import { OperationService } from "./services/operationService.ts";
 import type { LlmProvider } from "./interfaces/assistant.ts";
 import type {
   DockerClient,
@@ -28,6 +30,7 @@ export interface AppOptions {
   serviceManager?: ServiceManager;
   toolService?: ToolService;
   assistantService?: AssistantService;
+  operationService?: OperationService;
   llmProvider?: LlmProvider;
 }
 
@@ -41,10 +44,13 @@ export function buildApp(options: AppOptions = {}) {
   const assistantService =
     options.assistantService ??
     new AssistantService({ toolService, llmProvider: options.llmProvider });
+  const operationService =
+    options.operationService ?? new OperationService(serviceManager);
 
   registerServicesRoutes(app, { serviceManager });
   registerToolsRoutes(app, { toolService });
   registerAssistantRoutes(app, { assistantService });
+  registerOperationsRoutes(app, { operationService });
 
   return app;
 }
