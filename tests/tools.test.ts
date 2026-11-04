@@ -61,4 +61,45 @@ describe("POST /api/tools/execute", () => {
     expect(body.result.services.length).toBe(1);
     expect(body.result.services[0].name).toBe("pihole");
   });
+
+  it("runs get_service_status and returns status and metrics", async () => {
+    const mockDocker = {
+      getContainerStatus: async () => "running" as const,
+      getContainerMetrics: async () => ({
+        available: true,
+        cpuPercent: 12.5,
+        memoryUsedBytes: 1048576,
+        memoryLimitBytes: 2097152,
+        uptimeSeconds: 3600,
+      }),
+    };
+    const app = buildApp({ dockerClient: mockDocker });
+    const regRes = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "vaultwarden", externalId: "vw-ctr", integration: "docker" },
+    });
+    const serviceId = regRes.json().id;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/tools/execute",
+      payload: {
+        tool: "get_service_status",
+        parameters: { service_id: serviceId },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.tool).toBe("get_service_status");
+    expect(body.result).toBeDefined();
+    expect(body.result.id).toBe(serviceId);
+    expect(body.result.status).toBe("running");
+    expect(body.result.metrics).toMatchObject({
+      available: true,
+      cpuPercent: 12.5,
+      uptimeSeconds: 3600,
+    });
+  });
 });

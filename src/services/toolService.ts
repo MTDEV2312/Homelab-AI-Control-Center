@@ -93,6 +93,17 @@ export class ToolService {
       };
     }
 
+    if (toolName === "get_service_status") {
+      if (!parameters.service_id) {
+        throw new Error("Missing required parameter: service_id");
+      }
+      const service = await this.serviceManager.getById(parameters.service_id);
+      if (!service) {
+        throw new Error(`Service not found: ${parameters.service_id}`);
+      }
+      return service;
+    }
+
     throw new Error(`Unknown tool: ${toolName}`);
   }
 }
