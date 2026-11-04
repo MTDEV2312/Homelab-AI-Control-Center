@@ -53,15 +53,23 @@ export class AssistantService {
       });
 
       if (output.toolCall) {
-        const result = await this.toolService.execute(
-          output.toolCall.tool,
-          output.toolCall.parameters
-        );
-        toolTraces.push({
-          tool: output.toolCall.tool,
-          parameters: output.toolCall.parameters,
-          result,
-        });
+        try {
+          const result = await this.toolService.execute(
+            output.toolCall.tool,
+            output.toolCall.parameters
+          );
+          toolTraces.push({
+            tool: output.toolCall.tool,
+            parameters: output.toolCall.parameters,
+            result,
+          });
+        } catch (err: any) {
+          toolTraces.push({
+            tool: output.toolCall.tool,
+            parameters: output.toolCall.parameters,
+            error: err?.message || "Tool execution failed",
+          });
+        }
       }
 
       if (output.diagnosis) {

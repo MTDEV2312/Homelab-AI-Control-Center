@@ -8,7 +8,8 @@ export interface ToolCallProposal {
 export interface ToolCallTrace {
   tool: string;
   parameters: Record<string, any>;
-  result: any;
+  result?: any;
+  error?: string;
 }
 
 export interface StructuredDiagnosis {

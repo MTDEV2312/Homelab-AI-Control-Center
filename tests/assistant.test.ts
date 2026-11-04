@@ -176,3 +176,93 @@ describe("POST /api/assistant/diagnose", () => {
     expect(resFailedLlm.json().error).toContain("Connection refused to Ollama");
   });
 });
+
+describe("AssistantService unit", () => {
+  it("bounds tool call iterations to prevent infinite loops", async () => {
+    let callCount = 0;
+    const infiniteLlm: LlmProvider = {
+      chat: async () => {
+        callCount++;
+        return {
+          toolCall: {
+            tool: "list_services",
+            parameters: {},
+          },
+        };
+      },
+    };
+
+    const mockServiceManager = {
+      list: async () => ({
+        summary: { total: 0, online: 0, unhealthy: 0 },
+        integrationStatus: { docker: "available" as const },
+        services: [],
+      }),
+    } as any;
+
+    const { ToolService } = await import("../src/services/toolService.ts");
+    const { AssistantService } = await import("../src/services/assistantService.ts");
+
+    const toolService = new ToolService(mockServiceManager);
+    const service = new AssistantService({
+      toolService,
+      llmProvider: infiniteLlm,
+      maxIterations: 2,
+    });
+
+    const result = await service.diagnose({ query: "Trigger endless tool loop" });
+
+    expect(callCount).toBe(2);
+    expect(result.toolTraces).toHaveLength(2);
+    expect(result.diagnosis.facts[0]).toContain("maximum investigation iterations");
+    expect(result.diagnosis.recommendations).toHaveLength(1);
+  });
+
+  it("captures tool execution errors in trace without aborting diagnosis", async () => {
+    const errorToolLlm: LlmProvider = {
+      chat: async ({ step }) => {
+        if (step === 0) {
+          return {
+            toolCall: {
+              tool: "non_existent_tool",
+              parameters: {},
+            },
+          };
+        }
+        return {
+          diagnosis: {
+            facts: ["Encountered unavailable tool during investigation"],
+            hypotheses: [],
+            evidence: [],
+            recommendations: ["Check available tool catalog"],
+          },
+        };
+      },
+    };
+
+    const mockServiceManager = {
+      list: async () => ({
+        summary: { total: 0, online: 0, unhealthy: 0 },
+        integrationStatus: { docker: "available" as const },
+        services: [],
+      }),
+    } as any;
+
+    const { ToolService } = await import("../src/services/toolService.ts");
+    const { AssistantService } = await import("../src/services/assistantService.ts");
+
+    const toolService = new ToolService(mockServiceManager);
+    const service = new AssistantService({
+      toolService,
+      llmProvider: errorToolLlm,
+      maxIterations: 3,
+    });
+
+    const result = await service.diagnose({ query: "Test tool error capture" });
+
+    expect(result.toolTraces).toHaveLength(1);
+    expect(result.toolTraces[0].tool).toBe("non_existent_tool");
+    expect(result.toolTraces[0].error).toContain("Unknown tool");
+    expect(result.diagnosis.facts[0]).toContain("Encountered unavailable tool");
+  });
+});
