@@ -52,4 +52,15 @@ export async function registerServicesRoutes(
       return result;
     }
   );
+
+  app.get<{ Params: { id: string } }>(
+    "/api/services/:id/health-checks",
+    async (request, reply) => {
+      const result = await serviceManager.getHealthCheckHistory(request.params.id);
+      if (!result) {
+        return reply.status(404).send({ message: "Service not found" });
+      }
+      return result;
+    }
+  );
 }

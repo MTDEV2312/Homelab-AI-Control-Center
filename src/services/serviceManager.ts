@@ -183,6 +183,17 @@ export class ServiceManager {
     return check;
   }
 
+  async getHealthCheckHistory(id: string, limit: number = 20): Promise<{ serviceId: string; history: HealthCheckResult[] } | null> {
+    const service = this.services.find((s) => s.id === id);
+    if (!service) return null;
+
+    const history = (this.healthChecks.get(service.id) || []).slice(-limit);
+    return {
+      serviceId: service.id,
+      history,
+    };
+  }
+
   async getLogs(id: string, options?: LogFilterOptions): Promise<{ serviceId: string; entries: LogEntry[] } | null> {
     const service = this.services.find((s) => s.id === id);
     if (!service) return null;

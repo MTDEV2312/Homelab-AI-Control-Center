@@ -388,3 +388,56 @@ describe("POST /api/services/:id/health-check", () => {
     });
   });
 });
+
+describe("GET /api/services/:id/health-checks", () => {
+  it("returns bounded recent history with latency, timestamps, and error codes", async () => {
+    let checkCount = 0;
+    const mockDocker = {
+      getContainerStatus: async () => "running" as const,
+      checkHealth: async () => {
+        checkCount++;
+        if (checkCount === 1) {
+          return { status: "healthy" as const, latencyMs: 25 };
+        }
+        return { status: "unhealthy" as const, latencyMs: 120, errorCode: "TIMEOUT" };
+      },
+    };
+
+    const app = buildApp({ dockerClient: mockDocker });
+
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "jellyfin", externalId: "jellyfin-c", integration: "docker" },
+    });
+    const created = createRes.json();
+
+    await app.inject({
+      method: "POST",
+      url: `/api/services/${created.id}/health-check`,
+    });
+    await app.inject({
+      method: "POST",
+      url: `/api/services/${created.id}/health-check`,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/services/${created.id}/health-checks`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.serviceId).toBe(created.id);
+    expect(body.history).toHaveLength(2);
+    expect(body.history[0]).toMatchObject({
+      status: "healthy",
+      latencyMs: 25,
+    });
+    expect(body.history[1]).toMatchObject({
+      status: "unhealthy",
+      latencyMs: 120,
+      errorCode: "TIMEOUT",
+    });
+  });
+});
