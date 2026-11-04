@@ -41,6 +41,7 @@ export interface DockerClient {
   getContainerMetrics?(containerId: string): Promise<Omit<ContainerMetrics, "available">>;
   getContainerLogs?(containerId: string, options?: LogFilterOptions): Promise<LogEntry[]>;
   checkHealth?(containerId: string): Promise<{ status: HealthStatus; latencyMs: number; errorCode?: string }>;
+  executeContainerAction?(containerId: string, action: string): Promise<void>;
 }
 
 export interface Service {

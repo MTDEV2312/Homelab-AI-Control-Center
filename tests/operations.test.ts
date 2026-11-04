@@ -53,3 +53,65 @@ describe("POST /api/operations/request", () => {
     });
   });
 });
+
+describe("POST /api/operations/:id/confirm", () => {
+  it("executes container action, updates service status, and logs audit entry", async () => {
+    let executedAction: { containerId: string; action: string } | null = null;
+    let containerStatus: "running" | "stopped" = "running";
+
+    const mockDocker = {
+      getContainerStatus: async () => containerStatus,
+      executeContainerAction: async (containerId: string, action: string) => {
+        executedAction = { containerId, action };
+        if (action === "stop") containerStatus = "stopped";
+        if (action === "start" || action === "restart") containerStatus = "running";
+      },
+    };
+
+    const app = buildApp({ dockerClient: mockDocker });
+
+    const srvRes = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "vaultwarden", externalId: "vw-ctr", integration: "docker" },
+    });
+    const service = srvRes.json();
+
+    const reqRes = await app.inject({
+      method: "POST",
+      url: "/api/operations/request",
+      payload: { serviceId: service.id, action: "restart" },
+    });
+    const { operation } = reqRes.json();
+
+    const confirmRes = await app.inject({
+      method: "POST",
+      url: `/api/operations/${operation.id}/confirm`,
+      payload: { confirmationToken: operation.confirmationToken },
+    });
+
+    expect(confirmRes.statusCode).toBe(200);
+    const body = confirmRes.json();
+    expect(body.status).toBe("executed");
+    expect(body.operation.status).toBe("executed");
+    expect(body.auditEntry).toMatchObject({
+      action: "restart",
+      riskLevel: "L2",
+      serviceId: service.id,
+      outcome: "success",
+    });
+    expect(body.auditEntry.timestamp).toBeDefined();
+
+    expect(executedAction).toEqual({
+      containerId: "vw-ctr",
+      action: "restart",
+    });
+
+    const statusRes = await app.inject({
+      method: "GET",
+      url: `/api/services/${service.id}`,
+    });
+    expect(statusRes.json().status).toBe("running");
+  });
+});
+

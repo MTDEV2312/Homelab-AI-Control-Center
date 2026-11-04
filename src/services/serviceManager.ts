@@ -255,4 +255,15 @@ export class ServiceManager {
       entries,
     };
   }
+
+  async executeServiceAction(id: string, action: string): Promise<boolean> {
+    const service = this.services.find((s) => s.id === id);
+    if (!service) return false;
+
+    if (this.dockerClient?.executeContainerAction && service.integration === "docker") {
+      await this.dockerClient.executeContainerAction(service.externalId, action);
+      return true;
+    }
+    return true;
+  }
 }

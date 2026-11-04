@@ -26,4 +26,27 @@ export function registerOperationsRoutes(
 
     return reply.status(201).send({ operation: pending });
   });
+
+  app.post<{
+    Params: {
+      id: string;
+    };
+    Body: {
+      confirmationToken: string;
+    };
+  }>("/api/operations/:id/confirm", async (request, reply) => {
+    const { id } = request.params;
+    const { confirmationToken } = request.body || {};
+
+    if (!confirmationToken) {
+      return reply.status(400).send({ error: "Missing confirmationToken" });
+    }
+
+    const result = await operationService.confirmOperation(id, confirmationToken);
+    if ("error" in result) {
+      return reply.status(result.code).send({ error: result.error });
+    }
+
+    return reply.status(200).send(result);
+  });
 }
