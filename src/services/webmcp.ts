@@ -13,8 +13,12 @@ export interface RegisterWebMcpResult {
 export async function registerWebMcpTools(
   options: RegisterWebMcpOptions
 ): Promise<RegisterWebMcpResult> {
-  const nav = typeof window !== "undefined" ? (window.navigator as any) : undefined;
-  if (!nav || !nav.modelContext || typeof nav.modelContext.registerTool !== "function") {
+  const context =
+    (typeof document !== "undefined" && (document as any).modelContext) ||
+    (typeof window !== "undefined" && (window as any).modelContext) ||
+    (typeof navigator !== "undefined" && (navigator as any).modelContext);
+
+  if (!context || typeof context.registerTool !== "function") {
     return {
       supported: false,
       registeredTools: [],
@@ -39,13 +43,16 @@ export async function registerWebMcpTools(
   const registeredTools: string[] = [];
 
   for (const tool of options.tools) {
-    nav.modelContext.registerTool({
+    const runTool = async (parameters: Record<string, any>) => {
+      return executor(tool.name, parameters);
+    };
+
+    context.registerTool({
       name: tool.name,
       description: tool.description,
       inputSchema: tool.inputSchema,
-      handler: async (parameters: Record<string, any>) => {
-        return executor(tool.name, parameters);
-      },
+      execute: runTool,
+      handler: runTool,
     });
     registeredTools.push(tool.name);
   }

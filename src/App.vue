@@ -50,6 +50,18 @@ async function initWebMcp() {
         supported: result.supported,
         registeredCount: result.registeredTools.length,
       };
+
+      if (!result.supported) {
+        setTimeout(async () => {
+          const retry = await registerWebMcpTools({ tools });
+          if (retry.supported) {
+            webmcpStatus.value = {
+              supported: true,
+              registeredCount: retry.registeredTools.length,
+            };
+          }
+        }, 500);
+      }
     }
   } catch (error) {
     console.warn("Failed to initialize WebMCP tools", error);
