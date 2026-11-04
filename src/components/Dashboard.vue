@@ -31,7 +31,9 @@
         >
           <span class="service-name">{{ service.name }}</span>
           <span class="service-integration">{{ service.integration }}</span>
-          <span class="service-status">{{ service.status }}</span>
+          <span v-if="service.healthCheck" class="service-latency">{{ service.healthCheck.latencyMs }}ms</span>
+          <span v-if="service.consecutiveFailures" class="service-failures">{{ service.consecutiveFailures }} failed</span>
+          <span class="service-status" :class="service.status">{{ service.status }}</span>
           <span class="service-checked">{{ service.lastCheckedAt }}</span>
         </li>
       </ul>
@@ -61,6 +63,14 @@
         <em>Metrics unavailable: {{ selectedService.metrics?.reason || 'No metrics' }}</em>
       </div>
 
+      <ServiceHealth
+        :service-id="selectedService.id"
+        :health-check="selectedService.healthCheck"
+        :consecutive-failures="selectedService.consecutiveFailures"
+        :history="healthHistory"
+        @run-check="(id) => emit('runHealthCheck', id)"
+      />
+
       <h4>Container Logs</h4>
       <ServiceLogs :logs="logs" @filter-change="(f) => emit('filterLogs', f)" />
     </aside>
@@ -70,7 +80,8 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import ServiceLogs from "./ServiceLogs.vue";
-import type { LogEntry, LogLevel } from "../interfaces/service.ts";
+import ServiceHealth from "./ServiceHealth.vue";
+import type { LogEntry, LogLevel, HealthCheckResult } from "../interfaces/service.ts";
 
 export interface ServiceItem {
   id: string;
@@ -79,6 +90,8 @@ export interface ServiceItem {
   integration: string;
   status: "running" | "stopped" | "unhealthy" | "unknown";
   lastCheckedAt?: string;
+  consecutiveFailures?: number;
+  healthCheck?: HealthCheckResult;
   metrics?: {
     available: boolean;
     reason?: string;
@@ -101,12 +114,14 @@ const props = withDefaults(
     integrationStatus?: { docker?: string };
     services?: ServiceItem[];
     logs?: LogEntry[];
+    healthHistory?: HealthCheckResult[];
   }>(),
   {
     summary: () => ({ total: 0, online: 0, unhealthy: 0 }),
     integrationStatus: () => ({ docker: "available" }),
     services: () => [],
     logs: () => [],
+    healthHistory: () => [],
   }
 );
 
@@ -114,6 +129,7 @@ const emit = defineEmits<{
   (e: "registerService", payload: { name: string; externalId: string; integration: string }): void;
   (e: "selectService", service: ServiceItem): void;
   (e: "filterLogs", filters: { query: string; level?: LogLevel }): void;
+  (e: "runHealthCheck", serviceId: string): void;
 }>();
 
 const form = ref({

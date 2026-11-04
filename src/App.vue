@@ -5,9 +5,11 @@
       :integration-status="data.integrationStatus"
       :services="data.services"
       :logs="activeLogs"
+      :health-history="activeHealthHistory"
       @register-service="handleRegister"
       @select-service="handleSelectService"
       @filter-logs="handleFilterLogs"
+      @run-health-check="handleRunHealthCheck"
     />
   </main>
 </template>
@@ -15,7 +17,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 import Dashboard, { type Summary, type ServiceItem } from "./components/Dashboard.vue";
-import type { LogEntry, LogLevel } from "./interfaces/service.ts";
+import type { LogEntry, LogLevel, HealthCheckResult } from "./interfaces/service.ts";
 
 const data = ref<{
   summary: Summary;
@@ -28,6 +30,7 @@ const data = ref<{
 });
 
 const activeLogs = ref<LogEntry[]>([]);
+const activeHealthHistory = ref<HealthCheckResult[]>([]);
 const currentSelectedId = ref<string | null>(null);
 
 async function loadServices() {
@@ -69,8 +72,39 @@ async function handleSelectService(service: ServiceItem) {
     }
 
     await fetchLogs(service.id);
+    await fetchHealthHistory(service.id);
   } catch (error) {
     console.error("Failed to fetch service details", error);
+  }
+}
+
+async function fetchHealthHistory(serviceId: string) {
+  try {
+    const res = await fetch(`/api/services/${serviceId}/health-checks`);
+    if (res.ok) {
+      const histData = await res.json();
+      activeHealthHistory.value = histData.history || [];
+    }
+  } catch (error) {
+    console.error("Failed to fetch health checks history", error);
+  }
+}
+
+async function handleRunHealthCheck(serviceId: string) {
+  try {
+    const res = await fetch(`/api/services/${serviceId}/health-check`, {
+      method: "POST",
+    });
+    if (res.ok) {
+      await loadServices();
+      await fetchHealthHistory(serviceId);
+      const detailed = data.value.services.find((s) => s.id === serviceId);
+      if (detailed) {
+        handleSelectService(detailed);
+      }
+    }
+  } catch (error) {
+    console.error("Failed to execute health check", error);
   }
 }
 
@@ -184,6 +218,21 @@ ul {
   font-size: 0.85rem;
   text-transform: uppercase;
   background: #334155;
+}
+.service-latency {
+  background: #0f172a;
+  border: 1px solid #334155;
+  color: #94a3b8;
+  font-size: 0.8rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+}
+.service-failures {
+  background: #7f1d1d;
+  color: #fca5a5;
+  font-size: 0.8rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
 }
 .service-detail-panel {
   background: #1e293b;
