@@ -7,10 +7,14 @@
       :logs="activeLogs"
       :health-history="activeHealthHistory"
       :webmcp-status="webmcpStatus"
+      :assistant-response="assistantResponse"
+      :assistant-loading="assistantLoading"
+      :assistant-error="assistantError"
       @register-service="handleRegister"
       @select-service="handleSelectService"
       @filter-logs="handleFilterLogs"
       @run-health-check="handleRunHealthCheck"
+      @ask-ai-assistant="handleAskAiAssistant"
     />
   </main>
 </template>
@@ -20,6 +24,7 @@ import { ref, onMounted } from "vue";
 import Dashboard, { type Summary, type ServiceItem, type WebMcpStatus } from "./components/Dashboard.vue";
 import { registerWebMcpTools } from "./services/webmcp.ts";
 import type { LogEntry, LogLevel, HealthCheckResult } from "./interfaces/service.ts";
+import type { DiagnosticResponse } from "./interfaces/assistant.ts";
 
 const data = ref<{
   summary: Summary;
@@ -39,6 +44,31 @@ const webmcpStatus = ref<WebMcpStatus>({
 const activeLogs = ref<LogEntry[]>([]);
 const activeHealthHistory = ref<HealthCheckResult[]>([]);
 const currentSelectedId = ref<string | null>(null);
+
+const assistantResponse = ref<DiagnosticResponse | null>(null);
+const assistantLoading = ref(false);
+const assistantError = ref<string | null>(null);
+
+async function handleAskAiAssistant(query: string, serviceId?: string) {
+  assistantLoading.value = true;
+  assistantError.value = null;
+  try {
+    const res = await fetch("/api/assistant/diagnose", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, serviceId }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || "Failed to execute diagnostic inquiry");
+    }
+    assistantResponse.value = data;
+  } catch (err: any) {
+    assistantError.value = err?.message || "Assistant error";
+  } finally {
+    assistantLoading.value = false;
+  }
+}
 
 async function initWebMcp() {
   try {

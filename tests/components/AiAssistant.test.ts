@@ -65,4 +65,21 @@ describe("AiAssistant component", () => {
     expect(recommendations.exists()).toBe(true);
     expect(recommendations.text()).toContain("Check client credentials or reset password");
   });
+
+  it("displays provider error banner and disables button during loading", async () => {
+    const wrapper = mount(AiAssistant, {
+      props: {
+        isLoading: true,
+        error: "Ollama connection failed: service unavailable (503)",
+      },
+    });
+
+    const banner = wrapper.find(".banner.error");
+    expect(banner.exists()).toBe(true);
+    expect(banner.text()).toContain("Ollama connection failed: service unavailable (503)");
+
+    const btn = wrapper.find('button[type="submit"]');
+    expect(btn.attributes("disabled")).toBeDefined();
+    expect(btn.text()).toContain("Diagnosing...");
+  });
 });

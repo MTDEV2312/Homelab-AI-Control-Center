@@ -114,4 +114,28 @@ describe("Dashboard component", () => {
     expect(wrapperUnsupported.find(".webmcp-status").exists()).toBe(true);
     expect(wrapperUnsupported.find(".webmcp-status").text()).toContain("WebMCP Unavailable");
   });
+
+  it("embeds AiAssistant in detail drawer and forwards ask event", async () => {
+    const wrapper = mount(Dashboard, {
+      props: {
+        services: [
+          {
+            id: "srv-1",
+            name: "vaultwarden",
+            externalId: "vw-ctr",
+            integration: "docker",
+            status: "running",
+          },
+        ],
+      },
+    });
+
+    await wrapper.find(".service-item").trigger("click");
+    const assistant = wrapper.findComponent({ name: "AiAssistant" });
+    expect(assistant.exists()).toBe(true);
+
+    await assistant.vm.$emit("ask", "Why is vaultwarden locked?", "srv-1");
+    expect(wrapper.emitted("askAiAssistant")).toBeTruthy();
+    expect(wrapper.emitted("askAiAssistant")?.[0]).toEqual(["Why is vaultwarden locked?", "srv-1"]);
+  });
 });

@@ -81,6 +81,15 @@
 
       <h4>Container Logs</h4>
       <ServiceLogs :logs="logs" @filter-change="(f) => emit('filterLogs', f)" />
+
+      <AiAssistant
+        :service-id="selectedService.id"
+        :service-name="selectedService.name"
+        :diagnostic-response="assistantResponse"
+        :is-loading="assistantLoading"
+        :error="assistantError"
+        @ask="(q, id) => emit('askAiAssistant', q, id)"
+      />
     </aside>
   </div>
 </template>
@@ -89,7 +98,9 @@
 import { ref, computed } from "vue";
 import ServiceLogs from "./ServiceLogs.vue";
 import ServiceHealth from "./ServiceHealth.vue";
+import AiAssistant from "./AiAssistant.vue";
 import type { LogEntry, LogLevel, HealthCheckResult } from "../interfaces/service.ts";
+import type { DiagnosticResponse } from "../interfaces/assistant.ts";
 
 export interface ServiceItem {
   id: string;
@@ -129,6 +140,9 @@ const props = withDefaults(
     logs?: LogEntry[];
     healthHistory?: HealthCheckResult[];
     webmcpStatus?: WebMcpStatus;
+    assistantResponse?: DiagnosticResponse | null;
+    assistantLoading?: boolean;
+    assistantError?: string | null;
   }>(),
   {
     summary: () => ({ total: 0, online: 0, unhealthy: 0 }),
@@ -137,6 +151,9 @@ const props = withDefaults(
     logs: () => [],
     healthHistory: () => [],
     webmcpStatus: () => ({ supported: false, registeredCount: 0 }),
+    assistantResponse: null,
+    assistantLoading: false,
+    assistantError: null,
   }
 );
 
@@ -145,6 +162,7 @@ const emit = defineEmits<{
   (e: "selectService", service: ServiceItem): void;
   (e: "filterLogs", filters: { query: string; level?: LogLevel }): void;
   (e: "runHealthCheck", serviceId: string): void;
+  (e: "askAiAssistant", query: string, serviceId?: string): void;
 }>();
 
 const form = ref({
