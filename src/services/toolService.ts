@@ -71,7 +71,11 @@ export const READONLY_TOOLS: ToolDefinition[] = [
 ];
 
 export class ToolService {
-  constructor(private serviceManager: ServiceManager) {}
+  private serviceManager: ServiceManager;
+
+  constructor(serviceManager: ServiceManager) {
+    this.serviceManager = serviceManager;
+  }
 
   getTools(): ToolDefinition[] {
     return READONLY_TOOLS;
