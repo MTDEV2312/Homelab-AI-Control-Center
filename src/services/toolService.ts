@@ -76,4 +76,23 @@ export class ToolService {
   getTools(): ToolDefinition[] {
     return READONLY_TOOLS;
   }
+
+  async execute(toolName: string, parameters: Record<string, any> = {}): Promise<any> {
+    if (toolName === "list_services") {
+      const data = await this.serviceManager.list();
+      let services = data.services;
+      if (parameters.status) {
+        services = services.filter((s) => s.status === parameters.status);
+      }
+      if (typeof parameters.limit === "number") {
+        services = services.slice(0, parameters.limit);
+      }
+      return {
+        summary: data.summary,
+        services,
+      };
+    }
+
+    throw new Error(`Unknown tool: ${toolName}`);
+  }
 }

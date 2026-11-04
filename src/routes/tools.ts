@@ -16,4 +16,21 @@ export function registerToolsRoutes(
       tools: toolService.getTools(),
     });
   });
+
+  app.post("/api/tools/execute", async (request, reply) => {
+    const body = (request.body || {}) as { tool?: string; parameters?: Record<string, any> };
+    if (!body.tool) {
+      return reply.status(400).send({ error: "Tool name is required" });
+    }
+
+    try {
+      const result = await toolService.execute(body.tool, body.parameters || {});
+      return reply.status(200).send({
+        tool: body.tool,
+        result,
+      });
+    } catch (err: any) {
+      return reply.status(400).send({ error: err.message });
+    }
+  });
 }

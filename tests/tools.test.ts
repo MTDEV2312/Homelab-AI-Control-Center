@@ -34,3 +34,31 @@ describe("GET /api/tools", () => {
     expect(searchLogs.inputSchema.properties).toHaveProperty("query");
   });
 });
+
+describe("POST /api/tools/execute", () => {
+  it("runs list_services and returns services list", async () => {
+    const app = buildApp();
+    await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "pihole", externalId: "pihole-ctr", integration: "docker" },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/tools/execute",
+      payload: {
+        tool: "list_services",
+        parameters: {},
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.tool).toBe("list_services");
+    expect(body.result).toBeDefined();
+    expect(body.result.services).toBeInstanceOf(Array);
+    expect(body.result.services.length).toBe(1);
+    expect(body.result.services[0].name).toBe("pihole");
+  });
+});
