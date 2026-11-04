@@ -18,6 +18,15 @@ export async function registerWebMcpTools(
     (typeof window !== "undefined" && (window as any).modelContext) ||
     (typeof navigator !== "undefined" && (navigator as any).modelContext);
 
+  if (typeof window !== "undefined") {
+    console.debug("[WebMCP] Diagnostic check:", {
+      isSecureContext: window.isSecureContext,
+      hasNavModelContext: "modelContext" in navigator,
+      hasDocModelContext: "modelContext" in document,
+      contextFound: Boolean(context),
+    });
+  }
+
   if (!context || typeof context.registerTool !== "function") {
     return {
       supported: false,
@@ -47,14 +56,18 @@ export async function registerWebMcpTools(
       return executor(tool.name, parameters);
     };
 
-    context.registerTool({
-      name: tool.name,
-      description: tool.description,
-      inputSchema: tool.inputSchema,
-      execute: runTool,
-      handler: runTool,
-    });
-    registeredTools.push(tool.name);
+    try {
+      context.registerTool({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        execute: runTool,
+        handler: runTool,
+      });
+      registeredTools.push(tool.name);
+    } catch (err) {
+      console.error(`[WebMCP] Failed to register tool "${tool.name}":`, err);
+    }
   }
 
   return {
