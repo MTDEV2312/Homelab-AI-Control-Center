@@ -79,6 +79,10 @@ export class ToolService {
 
   async execute(toolName: string, parameters: Record<string, any> = {}): Promise<any> {
     if (toolName === "list_services") {
+      const allowedStatuses = ["running", "stopped", "unhealthy", "unknown"];
+      if (parameters.status && !allowedStatuses.includes(parameters.status)) {
+        throw new Error(`Invalid status: ${parameters.status}. Must be one of: ${allowedStatuses.join(", ")}`);
+      }
       const data = await this.serviceManager.list();
       let services = data.services;
       if (parameters.status) {
@@ -107,6 +111,10 @@ export class ToolService {
     if (toolName === "search_logs") {
       if (!parameters.service_id) {
         throw new Error("Missing required parameter: service_id");
+      }
+      const allowedLevels = ["info", "warn", "error"];
+      if (parameters.level && !allowedLevels.includes(parameters.level)) {
+        throw new Error(`Invalid level: ${parameters.level}. Must be one of: ${allowedLevels.join(", ")}`);
       }
       const logsResult = await this.serviceManager.getLogs(parameters.service_id, {
         query: parameters.query,

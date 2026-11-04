@@ -140,4 +140,41 @@ describe("POST /api/tools/execute", () => {
     expect(body.result.entries[0].message).toContain("Bearer [REDACTED]");
     expect(body.result.entries[0].message).not.toContain("secret_token_123");
   });
+
+  it("rejects unknown tool or invalid parameters with 400 error", async () => {
+    const app = buildApp();
+
+    const resUnknown = await app.inject({
+      method: "POST",
+      url: "/api/tools/execute",
+      payload: {
+        tool: "unknown_tool",
+        parameters: {},
+      },
+    });
+    expect(resUnknown.statusCode).toBe(400);
+    expect(resUnknown.json().error).toContain("Unknown tool");
+
+    const resMissingParam = await app.inject({
+      method: "POST",
+      url: "/api/tools/execute",
+      payload: {
+        tool: "get_service_status",
+        parameters: {},
+      },
+    });
+    expect(resMissingParam.statusCode).toBe(400);
+    expect(resMissingParam.json().error).toContain("service_id");
+
+    const resInvalidEnum = await app.inject({
+      method: "POST",
+      url: "/api/tools/execute",
+      payload: {
+        tool: "list_services",
+        parameters: { status: "invalid_status" },
+      },
+    });
+    expect(resInvalidEnum.statusCode).toBe(400);
+    expect(resInvalidEnum.json().error).toContain("Invalid status");
+  });
 });
