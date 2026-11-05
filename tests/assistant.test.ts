@@ -321,4 +321,68 @@ describe("AssistantService unit", () => {
     expect(body.proposedOperation.confirmationToken).toBeDefined();
     expect(executedContainerAction).toBe(false);
   });
+
+  it("blocks assistant write tool execution attempt during tool-calling loop and logs audit rejection", async () => {
+    let targetServiceId = "";
+
+    const mockLlm: LlmProvider = {
+      chat: async ({ step }) => {
+        if (step === 0) {
+          return {
+            toolCall: {
+              tool: "restart_service",
+              parameters: { service_id: targetServiceId },
+            },
+          };
+        }
+        return {
+          diagnosis: {
+            facts: ["Attempted autonomous restart"],
+            hypotheses: [],
+            evidence: [],
+            recommendations: ["Require human confirmation"],
+          },
+        };
+      },
+    };
+
+    const mockDocker = {
+      getContainerStatus: async () => "running" as const,
+      executeContainerAction: async () => {},
+    };
+
+    const app = buildApp({ dockerClient: mockDocker, llmProvider: mockLlm });
+
+    const regRes = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "pihole", externalId: "pihole-ctr", integration: "docker" },
+    });
+    targetServiceId = regRes.json().id;
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/assistant/diagnose",
+      payload: {
+        query: "Restart pihole immediately",
+        serviceId: targetServiceId,
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.toolTraces).toHaveLength(1);
+    expect(body.toolTraces[0].tool).toBe("restart_service");
+    expect(body.toolTraces[0].error).toContain("Write operations cannot be executed directly");
+
+    const auditRes = await app.inject({
+      method: "GET",
+      url: `/api/audit?serviceId=${targetServiceId}`,
+    });
+    expect(auditRes.statusCode).toBe(200);
+    const auditEntries = auditRes.json();
+    const rejectedEntry = auditEntries.find((e: any) => e.actor === "assistant" && e.outcome === "rejected");
+    expect(rejectedEntry).toBeDefined();
+    expect(rejectedEntry.details).toContain("Autonomous write tool execution blocked");
+  });
 });

@@ -60,22 +60,64 @@ export class AssistantService {
       });
 
       if (output.toolCall) {
-        try {
-          const result = await this.toolService.execute(
-            output.toolCall.tool,
-            output.toolCall.parameters
-          );
+        const toolName = output.toolCall.tool.toLowerCase();
+        const isWriteTool =
+          toolName === "restart_service" ||
+          toolName === "stop_service" ||
+          toolName === "start_service" ||
+          toolName === "execute_operation" ||
+          toolName.startsWith("restart") ||
+          toolName.startsWith("stop") ||
+          (toolName.startsWith("start") && !toolName.includes("status"));
+
+        if (isWriteTool) {
           toolTraces.push({
             tool: output.toolCall.tool,
             parameters: output.toolCall.parameters,
-            result,
+            error:
+              "Write operations cannot be executed directly via tool calls. Autonomous write operations are prohibited; propose a pending recovery action instead.",
           });
-        } catch (err: any) {
-          toolTraces.push({
-            tool: output.toolCall.tool,
-            parameters: output.toolCall.parameters,
-            error: err?.message || "Tool execution failed",
-          });
+
+          if (this.operationService) {
+            const targetServiceId =
+              output.toolCall.parameters?.service_id ||
+              output.toolCall.parameters?.serviceId ||
+              request.serviceId ||
+              "unknown";
+            const action = toolName.includes("stop")
+              ? "stop"
+              : toolName.includes("start") && !toolName.includes("restart")
+              ? "start"
+              : "restart";
+            const riskLevel = action === "stop" ? "L3" : "L2";
+
+            this.operationService.recordAudit({
+              actor: "assistant",
+              action,
+              riskLevel,
+              serviceId: targetServiceId,
+              outcome: "rejected",
+              details: "Autonomous write tool execution blocked",
+            });
+          }
+        } else {
+          try {
+            const result = await this.toolService.execute(
+              output.toolCall.tool,
+              output.toolCall.parameters
+            );
+            toolTraces.push({
+              tool: output.toolCall.tool,
+              parameters: output.toolCall.parameters,
+              result,
+            });
+          } catch (err: any) {
+            toolTraces.push({
+              tool: output.toolCall.tool,
+              parameters: output.toolCall.parameters,
+              error: err?.message || "Tool execution failed",
+            });
+          }
         }
       }
 

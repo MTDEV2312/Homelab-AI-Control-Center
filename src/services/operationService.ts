@@ -144,4 +144,21 @@ export class OperationService {
     }
     return [...this.auditEntries];
   }
+
+  recordAudit(data: {
+    actor: string;
+    action: OperationAction;
+    riskLevel: RiskLevel;
+    serviceId: string;
+    outcome: "success" | "failure" | "rejected";
+    details?: string;
+  }): AuditEntry {
+    const entry: AuditEntry = {
+      id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+      ...data,
+    };
+    this.auditEntries.push(entry);
+    return entry;
+  }
 }
