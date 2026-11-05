@@ -385,4 +385,66 @@ describe("AssistantService unit", () => {
     expect(rejectedEntry).toBeDefined();
     expect(rejectedEntry.details).toContain("Autonomous write tool execution blocked");
   });
+
+  it("rejects proposed action violating service allowlist policy and records audit rejection", async () => {
+    let targetServiceId = "";
+
+    const mockLlm: LlmProvider = {
+      chat: async () => ({
+        diagnosis: {
+          facts: ["Cloudflared tunnel has high latency"],
+          hypotheses: ["Stale connection routing"],
+          evidence: ["Ping > 500ms"],
+          recommendations: ["Stop service to switch to secondary tunnel"],
+        },
+        proposedAction: {
+          action: "stop",
+        },
+      }),
+    };
+
+    const mockDocker = {
+      getContainerStatus: async () => "running" as const,
+      executeContainerAction: async () => {},
+    };
+
+    const app = buildApp({ dockerClient: mockDocker, llmProvider: mockLlm });
+
+    const regRes = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: {
+        name: "cloudflared",
+        externalId: "cf-ctr",
+        integration: "docker",
+        allowedActions: ["restart"],
+      },
+    });
+    targetServiceId = regRes.json().id;
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/assistant/diagnose",
+      payload: {
+        query: "Investigate cloudflared",
+        serviceId: targetServiceId,
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.proposedOperation).toBeUndefined();
+    expect(body.proposalRejectionReason).toContain("Action stop is not permitted by policy");
+
+    const auditRes = await app.inject({
+      method: "GET",
+      url: `/api/audit?serviceId=${targetServiceId}`,
+    });
+    expect(auditRes.statusCode).toBe(200);
+    const auditEntries = auditRes.json();
+    const rejectedEntry = auditEntries.find((e: any) => e.actor === "assistant" && e.outcome === "rejected");
+    expect(rejectedEntry).toBeDefined();
+    expect(rejectedEntry.action).toBe("stop");
+    expect(rejectedEntry.riskLevel).toBe("L3");
+  });
 });

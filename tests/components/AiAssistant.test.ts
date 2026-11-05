@@ -82,4 +82,50 @@ describe("AiAssistant component", () => {
     expect(btn.attributes("disabled")).toBeDefined();
     expect(btn.text()).toContain("Diagnosing...");
   });
+
+  it("displays proposed operation banner with risk level badge and emits confirm event", async () => {
+    const responseWithProposal: DiagnosticResponse = {
+      query: "How to fix Jellyfin?",
+      toolTraces: [],
+      diagnosis: {
+        facts: ["Process stalled"],
+        hypotheses: ["Resource deadlock"],
+        evidence: [],
+        recommendations: ["Restart the service"],
+      },
+      proposedOperation: {
+        id: "op-ai-999",
+        serviceId: "srv-jf",
+        action: "restart",
+        riskLevel: "L2",
+        status: "pending",
+        expiresAt: new Date(Date.now() + 300000).toISOString(),
+        confirmationToken: "token-ai-999",
+        createdAt: new Date().toISOString(),
+      },
+    };
+
+    const wrapper = mount(AiAssistant, {
+      props: {
+        serviceId: "srv-jf",
+        serviceName: "jellyfin",
+        diagnosticResponse: responseWithProposal,
+      },
+    });
+
+    const banner = wrapper.find(".proposed-operation-banner");
+    expect(banner.exists()).toBe(true);
+    expect(banner.text()).toContain("restart");
+
+    const badge = banner.find(".risk-badge");
+    expect(badge.exists()).toBe(true);
+    expect(badge.text()).toContain("L2");
+
+    const confirmBtn = banner.find(".btn-confirm-proposal");
+    expect(confirmBtn.exists()).toBe(true);
+    await confirmBtn.trigger("click");
+
+    expect(wrapper.emitted("confirmOperation")).toBeTruthy();
+    expect(wrapper.emitted("confirmOperation")?.[0]).toEqual(["op-ai-999", "token-ai-999"]);
+  });
 });
