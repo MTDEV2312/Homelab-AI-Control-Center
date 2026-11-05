@@ -177,4 +177,48 @@ describe("Dashboard component", () => {
     expect(wrapper.emitted("confirmOperation")).toBeTruthy();
     expect(wrapper.emitted("confirmOperation")?.[0]).toEqual(["op-1", "token-1"]);
   });
+
+  it("forwards assistant proposed operation confirmation into shared confirmOperation event", async () => {
+    const wrapper = mount(Dashboard, {
+      props: {
+        services: [
+          {
+            id: "srv-1",
+            name: "vaultwarden",
+            externalId: "vw-ctr",
+            integration: "docker",
+            status: "running",
+          },
+        ],
+        assistantResponse: {
+          query: "Fix memory leak",
+          toolTraces: [],
+          diagnosis: {
+            facts: ["Memory leak"],
+            hypotheses: [],
+            evidence: [],
+            recommendations: ["Restart container"],
+          },
+          proposedOperation: {
+            id: "op-ai-456",
+            serviceId: "srv-1",
+            action: "restart",
+            riskLevel: "L2",
+            status: "pending",
+            expiresAt: new Date(Date.now() + 300000).toISOString(),
+            confirmationToken: "token-ai-456",
+            createdAt: new Date().toISOString(),
+          },
+        },
+      },
+    });
+
+    await wrapper.find(".service-item").trigger("click");
+    const assistant = wrapper.findComponent({ name: "AiAssistant" });
+    expect(assistant.exists()).toBe(true);
+
+    await assistant.vm.$emit("confirmOperation", "op-ai-456", "token-ai-456");
+    expect(wrapper.emitted("confirmOperation")).toBeTruthy();
+    expect(wrapper.emitted("confirmOperation")?.[0]).toEqual(["op-ai-456", "token-ai-456"]);
+  });
 });

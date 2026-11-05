@@ -89,6 +89,7 @@
         :is-loading="assistantLoading"
         :error="assistantError"
         @ask="(q, id) => emit('askAiAssistant', q, id)"
+        @confirm-operation="(id, t) => emit('confirmOperation', id, t)"
       />
 
       <ServiceOperations
