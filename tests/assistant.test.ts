@@ -265,4 +265,60 @@ describe("AssistantService unit", () => {
     expect(result.toolTraces[0].error).toContain("Unknown tool");
     expect(result.diagnosis.facts[0]).toContain("Encountered unavailable tool");
   });
+
+  it("registers proposed recovery action as a pending operation without executing it", async () => {
+    let executedContainerAction = false;
+    let targetServiceId = "";
+
+    const mockLlm: LlmProvider = {
+      chat: async () => ({
+        diagnosis: {
+          facts: ["Jellyfin process is deadlocked"],
+          hypotheses: ["Memory leak in transcoder"],
+          evidence: ["Service unresponsive for 10 minutes"],
+          recommendations: ["Restart the service to recover memory"],
+        },
+        proposedAction: {
+          action: "restart",
+        },
+      }),
+    };
+
+    const mockDocker = {
+      getContainerStatus: async () => "unhealthy" as const,
+      executeContainerAction: async () => {
+        executedContainerAction = true;
+      },
+    };
+
+    const app = buildApp({ dockerClient: mockDocker, llmProvider: mockLlm });
+
+    const regRes = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "jellyfin", externalId: "jellyfin-ctr", integration: "docker" },
+    });
+    targetServiceId = regRes.json().id;
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/assistant/diagnose",
+      payload: {
+        query: "Diagnose and fix jellyfin",
+        serviceId: targetServiceId,
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.proposedOperation).toBeDefined();
+    expect(body.proposedOperation).toMatchObject({
+      serviceId: targetServiceId,
+      action: "restart",
+      riskLevel: "L2",
+      status: "pending",
+    });
+    expect(body.proposedOperation.confirmationToken).toBeDefined();
+    expect(executedContainerAction).toBe(false);
+  });
 });

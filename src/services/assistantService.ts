@@ -1,4 +1,5 @@
 import type { ToolService } from "./toolService.ts";
+import type { OperationService } from "./operationService.ts";
 import { redactLogMessage } from "./serviceManager.ts";
 import type {
   LlmProvider,
@@ -7,9 +8,11 @@ import type {
   ToolCallTrace,
   StructuredDiagnosis,
 } from "../interfaces/assistant.ts";
+import type { PendingOperation } from "../interfaces/operation.ts";
 
 export interface AssistantServiceOptions {
   toolService: ToolService;
+  operationService?: OperationService;
   llmProvider?: LlmProvider;
   maxIterations?: number;
 }
@@ -25,11 +28,13 @@ function redactDiagnosis(diagnosis: StructuredDiagnosis): StructuredDiagnosis {
 
 export class AssistantService {
   private toolService: ToolService;
+  private operationService?: OperationService;
   private llmProvider?: LlmProvider;
   private maxIterations: number;
 
   constructor(options: AssistantServiceOptions) {
     this.toolService = options.toolService;
+    this.operationService = options.operationService;
     this.llmProvider = options.llmProvider;
     this.maxIterations = options.maxIterations ?? 5;
   }
@@ -42,6 +47,8 @@ export class AssistantService {
     const availableTools = this.toolService.getTools();
     const toolTraces: ToolCallTrace[] = [];
     let finalDiagnosis: StructuredDiagnosis | null = null;
+    let proposedOperation: PendingOperation | undefined;
+    let proposalRejectionReason: string | undefined;
 
     for (let step = 0; step < this.maxIterations; step++) {
       const output = await this.llmProvider.chat({
@@ -72,6 +79,22 @@ export class AssistantService {
         }
       }
 
+      if (output.proposedAction && this.operationService) {
+        const targetServiceId = output.proposedAction.serviceId || request.serviceId;
+        if (targetServiceId) {
+          const res = await this.operationService.requestOperation({
+            serviceId: targetServiceId,
+            action: output.proposedAction.action,
+            actor: "assistant",
+          });
+          if ("operation" in res) {
+            proposedOperation = res.operation;
+          } else {
+            proposalRejectionReason = res.error;
+          }
+        }
+      }
+
       if (output.diagnosis) {
         finalDiagnosis = output.diagnosis;
         break;
@@ -91,6 +114,8 @@ export class AssistantService {
       query: request.query,
       toolTraces,
       diagnosis: redactDiagnosis(finalDiagnosis),
+      proposedOperation,
+      proposalRejectionReason,
     };
   }
 }

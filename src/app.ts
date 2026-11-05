@@ -41,11 +41,15 @@ export function buildApp(options: AppOptions = {}) {
     new ServiceManager({ dockerClient: options.dockerClient });
   const toolService =
     options.toolService ?? new ToolService(serviceManager);
-  const assistantService =
-    options.assistantService ??
-    new AssistantService({ toolService, llmProvider: options.llmProvider });
   const operationService =
     options.operationService ?? new OperationService(serviceManager);
+  const assistantService =
+    options.assistantService ??
+    new AssistantService({
+      toolService,
+      operationService,
+      llmProvider: options.llmProvider,
+    });
 
   registerServicesRoutes(app, { serviceManager });
   registerToolsRoutes(app, { toolService });

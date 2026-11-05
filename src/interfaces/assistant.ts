@@ -1,4 +1,5 @@
 import type { ToolDefinition } from "./tool.ts";
+import type { OperationAction, PendingOperation } from "./operation.ts";
 
 export interface ToolCallProposal {
   tool: string;
@@ -30,6 +31,10 @@ export interface LlmChatInput {
 export interface LlmChatOutput {
   toolCall?: ToolCallProposal;
   diagnosis?: StructuredDiagnosis;
+  proposedAction?: {
+    action: OperationAction;
+    serviceId?: string;
+  };
 }
 
 export interface LlmProvider {
@@ -45,4 +50,6 @@ export interface DiagnosticResponse {
   query: string;
   toolTraces: ToolCallTrace[];
   diagnosis: StructuredDiagnosis;
+  proposedOperation?: PendingOperation;
+  proposalRejectionReason?: string;
 }
