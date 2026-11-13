@@ -26,3 +26,13 @@ export interface CreateIncidentInput {
   evidence?: string[];
   actions?: string[];
 }
+
+export interface UpdateIncidentInput {
+  status?: IncidentStatus;
+  description?: string;
+  hypotheses?: string[];
+  evidence?: string[];
+  actions?: string[];
+  confirmedCause?: string;
+  resolutionNotes?: string;
+}

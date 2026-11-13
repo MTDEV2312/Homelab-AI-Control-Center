@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { IncidentService } from "../services/incidentService.ts";
-import type { CreateIncidentInput, IncidentStatus } from "../interfaces/incident.ts";
+import type { CreateIncidentInput, UpdateIncidentInput, IncidentStatus } from "../interfaces/incident.ts";
 
 export function registerIncidentsRoutes(
   app: FastifyInstance,
@@ -26,6 +26,18 @@ export function registerIncidentsRoutes(
     "/api/incidents",
     async (request) => {
       return incidentService.list(request.query);
+    }
+  );
+
+  app.patch<{ Params: { id: string }; Body: UpdateIncidentInput }>(
+    "/api/incidents/:id",
+    async (request, reply) => {
+      const { id } = request.params;
+      const incident = incidentService.update(id, request.body || {});
+      if (!incident) {
+        return reply.status(404).send({ error: "Incident not found" });
+      }
+      return reply.status(200).send(incident);
     }
   );
 }

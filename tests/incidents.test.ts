@@ -132,3 +132,82 @@ describe("GET /api/incidents", () => {
   });
 });
 
+describe("PATCH /api/incidents/:id", () => {
+  it("updates incident status, records confirmed root cause distinct from hypotheses, and sets resolvedAt timestamp on resolution", async () => {
+    const app = buildApp();
+
+    const srvRes = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "vaultwarden", externalId: "vw-ctr", integration: "docker" },
+    });
+    const service = srvRes.json();
+
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/incidents",
+      payload: {
+        serviceId: service.id,
+        title: "Vault synchronization locked",
+        severity: "high",
+        hypotheses: ["SQLite database locked by concurrent backup", "Corrupted index"],
+      },
+    });
+    const incident = createRes.json();
+
+    // 1. Transition to investigating and add evidence
+    const patchInvestigating = await app.inject({
+      method: "PATCH",
+      url: `/api/incidents/${incident.id}`,
+      payload: {
+        status: "investigating",
+        evidence: ["Found stuck backup cron job holding db lock"],
+      },
+    });
+
+    expect(patchInvestigating.statusCode).toBe(200);
+    const bodyInv = patchInvestigating.json();
+    expect(bodyInv.status).toBe("investigating");
+    expect(bodyInv.hypotheses).toEqual([
+      "SQLite database locked by concurrent backup",
+      "Corrupted index",
+    ]);
+    expect(bodyInv.evidence).toEqual(["Found stuck backup cron job holding db lock"]);
+    expect(bodyInv.resolvedAt).toBeUndefined();
+
+    // 2. Resolve incident with confirmedCause and resolutionNotes
+    const patchResolved = await app.inject({
+      method: "PATCH",
+      url: `/api/incidents/${incident.id}`,
+      payload: {
+        status: "resolved",
+        confirmedCause: "Stuck backup script held exclusive lock on sqlite file",
+        resolutionNotes: "Killed stuck cron process and restarted container",
+        actions: ["kill 4521", "restart"],
+      },
+    });
+
+    expect(patchResolved.statusCode).toBe(200);
+    const bodyResolved = patchResolved.json();
+    expect(bodyResolved.status).toBe("resolved");
+    expect(bodyResolved.resolvedAt).toBeDefined();
+    expect(bodyResolved.confirmedCause).toBe("Stuck backup script held exclusive lock on sqlite file");
+    expect(bodyResolved.resolutionNotes).toBe("Killed stuck cron process and restarted container");
+    expect(bodyResolved.actions).toEqual(["kill 4521", "restart"]);
+    // Ensure hypotheses remain intact and separate from confirmed cause
+    expect(bodyResolved.hypotheses).toEqual([
+      "SQLite database locked by concurrent backup",
+      "Corrupted index",
+    ]);
+
+    // 3. Rejects unknown incident ID
+    const notFoundRes = await app.inject({
+      method: "PATCH",
+      url: "/api/incidents/non-existent-id",
+      payload: { status: "mitigated" },
+    });
+    expect(notFoundRes.statusCode).toBe(404);
+  });
+});
+
+
