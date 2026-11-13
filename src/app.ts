@@ -3,10 +3,12 @@ import { registerServicesRoutes } from "./routes/services.ts";
 import { registerToolsRoutes } from "./routes/tools.ts";
 import { registerAssistantRoutes } from "./routes/assistant.ts";
 import { registerOperationsRoutes } from "./routes/operations.ts";
+import { registerIncidentsRoutes } from "./routes/incidents.ts";
 import { ServiceManager } from "./services/serviceManager.ts";
 import { ToolService } from "./services/toolService.ts";
 import { AssistantService } from "./services/assistantService.ts";
 import { OperationService } from "./services/operationService.ts";
+import { IncidentService } from "./services/incidentService.ts";
 import type { LlmProvider } from "./interfaces/assistant.ts";
 import type {
   DockerClient,
@@ -31,6 +33,7 @@ export interface AppOptions {
   toolService?: ToolService;
   assistantService?: AssistantService;
   operationService?: OperationService;
+  incidentService?: IncidentService;
   llmProvider?: LlmProvider;
 }
 
@@ -43,6 +46,8 @@ export function buildApp(options: AppOptions = {}) {
     options.toolService ?? new ToolService(serviceManager);
   const operationService =
     options.operationService ?? new OperationService(serviceManager);
+  const incidentService =
+    options.incidentService ?? new IncidentService(serviceManager);
   const assistantService =
     options.assistantService ??
     new AssistantService({
@@ -55,6 +60,7 @@ export function buildApp(options: AppOptions = {}) {
   registerToolsRoutes(app, { toolService });
   registerAssistantRoutes(app, { assistantService });
   registerOperationsRoutes(app, { operationService });
+  registerIncidentsRoutes(app, { incidentService });
 
   return app;
 }
