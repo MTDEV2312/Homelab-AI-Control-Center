@@ -221,4 +221,56 @@ describe("Dashboard component", () => {
     expect(wrapper.emitted("confirmOperation")).toBeTruthy();
     expect(wrapper.emitted("confirmOperation")?.[0]).toEqual(["op-ai-456", "token-ai-456"]);
   });
+
+  it("embeds ServiceIncidents in detail drawer and forwards incident create and update events", async () => {
+    const wrapper = mount(Dashboard, {
+      props: {
+        services: [
+          {
+            id: "srv-1",
+            name: "vaultwarden",
+            externalId: "vw-ctr",
+            integration: "docker",
+            status: "running",
+          },
+        ],
+        incidents: [
+          {
+            id: "inc-1",
+            serviceId: "srv-1",
+            title: "Database locked",
+            severity: "high",
+            status: "open",
+            startedAt: "2026-11-04T12:00:00Z",
+            hypotheses: ["Stuck backup process"],
+            evidence: ["500 internal server error"],
+            actions: [],
+          },
+        ],
+      },
+    });
+
+    await wrapper.find(".service-item").trigger("click");
+    const incidentsComp = wrapper.findComponent({ name: "ServiceIncidents" });
+    expect(incidentsComp.exists()).toBe(true);
+
+    // Forward createIncident
+    const createPayload = {
+      serviceId: "srv-1",
+      title: "High memory alert",
+      severity: "medium" as const,
+    };
+    await incidentsComp.vm.$emit("createIncident", createPayload);
+    expect(wrapper.emitted("createIncident")).toBeTruthy();
+    expect(wrapper.emitted("createIncident")?.[0]).toEqual([createPayload]);
+
+    // Forward updateIncident
+    const updatePayload = {
+      status: "resolved" as const,
+      confirmedCause: "Resolved memory spike",
+    };
+    await incidentsComp.vm.$emit("updateIncident", "inc-1", updatePayload);
+    expect(wrapper.emitted("updateIncident")).toBeTruthy();
+    expect(wrapper.emitted("updateIncident")?.[0]).toEqual(["inc-1", updatePayload]);
+  });
 });

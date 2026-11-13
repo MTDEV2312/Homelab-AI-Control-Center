@@ -14,6 +14,7 @@
       :audit-log="activeAuditLog"
       :operations-loading="operationsLoading"
       :operations-error="operationsError"
+      :incidents="activeIncidents"
       @register-service="handleRegister"
       @select-service="handleSelectService"
       @filter-logs="handleFilterLogs"
@@ -22,6 +23,8 @@
       @request-action="handleRequestAction"
       @confirm-operation="handleConfirmOperation"
       @cancel-operation="handleCancelOperation"
+      @create-incident="handleCreateIncident"
+      @update-incident="handleUpdateIncident"
     />
   </main>
 </template>
@@ -33,6 +36,7 @@ import { registerWebMcpTools } from "./services/webmcp.ts";
 import type { LogEntry, LogLevel, HealthCheckResult } from "./interfaces/service.ts";
 import type { DiagnosticResponse } from "./interfaces/assistant.ts";
 import type { OperationAction, PendingOperation, AuditEntry } from "./interfaces/operation.ts";
+import type { Incident, CreateIncidentInput, UpdateIncidentInput } from "./interfaces/incident.ts";
 
 const data = ref<{
   summary: Summary;
@@ -61,6 +65,53 @@ const pendingOperation = ref<PendingOperation | null>(null);
 const activeAuditLog = ref<AuditEntry[]>([]);
 const operationsLoading = ref(false);
 const operationsError = ref<string | null>(null);
+const activeIncidents = ref<Incident[]>([]);
+
+async function fetchIncidents(serviceId?: string) {
+  try {
+    const url = serviceId ? `/api/incidents?serviceId=${serviceId}` : "/api/incidents";
+    const res = await fetch(url);
+    if (res.ok) {
+      activeIncidents.value = await res.json();
+    }
+  } catch (error) {
+    console.error("Failed to fetch incidents", error);
+  }
+}
+
+async function handleCreateIncident(input: CreateIncidentInput) {
+  try {
+    const res = await fetch("/api/incidents", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (res.ok) {
+      await fetchIncidents(input.serviceId);
+    }
+  } catch (error) {
+    console.error("Failed to create incident", error);
+  }
+}
+
+async function handleUpdateIncident(id: string, input: UpdateIncidentInput) {
+  try {
+    const res = await fetch(`/api/incidents/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (res.ok) {
+      if (currentSelectedId.value) {
+        await fetchIncidents(currentSelectedId.value);
+      } else {
+        await fetchIncidents();
+      }
+    }
+  } catch (error) {
+    console.error("Failed to update incident", error);
+  }
+}
 
 async function fetchAuditLog(serviceId?: string) {
   try {
@@ -215,6 +266,7 @@ async function handleSelectService(service: ServiceItem) {
     await fetchLogs(service.id);
     await fetchHealthHistory(service.id);
     await fetchAuditLog(service.id);
+    await fetchIncidents(service.id);
   } catch (error) {
     console.error("Failed to fetch service details", error);
   }

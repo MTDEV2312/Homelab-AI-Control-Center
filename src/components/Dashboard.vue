@@ -105,6 +105,13 @@
         @confirm-operation="(id, t) => emit('confirmOperation', id, t)"
         @cancel-operation="() => emit('cancelOperation')"
       />
+
+      <ServiceIncidents
+        :service-id="selectedService.id"
+        :incidents="serviceIncidents"
+        @create-incident="(input) => emit('createIncident', input)"
+        @update-incident="(id, input) => emit('updateIncident', id, input)"
+      />
     </aside>
   </div>
 </template>
@@ -115,9 +122,11 @@ import ServiceLogs from "./ServiceLogs.vue";
 import ServiceHealth from "./ServiceHealth.vue";
 import AiAssistant from "./AiAssistant.vue";
 import ServiceOperations from "./ServiceOperations.vue";
+import ServiceIncidents from "./ServiceIncidents.vue";
 import type { LogEntry, LogLevel, HealthCheckResult } from "../interfaces/service.ts";
 import type { DiagnosticResponse } from "../interfaces/assistant.ts";
 import type { OperationAction, PendingOperation, AuditEntry } from "../interfaces/operation.ts";
+import type { Incident, CreateIncidentInput, UpdateIncidentInput } from "../interfaces/incident.ts";
 
 export interface ServiceItem {
   id: string;
@@ -165,6 +174,7 @@ const props = withDefaults(
     auditLog?: AuditEntry[];
     operationsLoading?: boolean;
     operationsError?: string | null;
+    incidents?: Incident[];
   }>(),
   {
     summary: () => ({ total: 0, online: 0, unhealthy: 0 }),
@@ -180,6 +190,7 @@ const props = withDefaults(
     auditLog: () => [],
     operationsLoading: false,
     operationsError: null,
+    incidents: () => [],
   }
 );
 
@@ -192,6 +203,8 @@ const emit = defineEmits<{
   (e: "requestAction", action: OperationAction, serviceId: string): void;
   (e: "confirmOperation", operationId: string, token: string): void;
   (e: "cancelOperation"): void;
+  (e: "createIncident", input: CreateIncidentInput): void;
+  (e: "updateIncident", id: string, input: UpdateIncidentInput): void;
 }>();
 
 const form = ref({
@@ -202,6 +215,10 @@ const form = ref({
 const selectedId = ref<string | null>(null);
 const selectedService = computed(() =>
   props.services.find((s) => s.id === selectedId.value) ?? null
+);
+
+const serviceIncidents = computed(() =>
+  props.incidents.filter((inc) => inc.serviceId === selectedService.value?.id)
 );
 
 function selectService(service: ServiceItem) {
