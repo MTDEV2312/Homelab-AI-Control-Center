@@ -56,3 +56,79 @@ describe("POST /api/incidents", () => {
     expect(notFoundRes.statusCode).toBe(404);
   });
 });
+
+describe("GET /api/incidents", () => {
+  it("lists incidents with optional serviceId and status filtering", async () => {
+    const app = buildApp();
+
+    const s1Res = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "service-1", externalId: "c-1", integration: "docker" },
+    });
+    const s1 = s1Res.json();
+
+    const s2Res = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "service-2", externalId: "c-2", integration: "docker" },
+    });
+    const s2 = s2Res.json();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/incidents",
+      payload: {
+        serviceId: s1.id,
+        title: "Database connection failed",
+        severity: "critical",
+      },
+    });
+
+    await app.inject({
+      method: "POST",
+      url: "/api/incidents",
+      payload: {
+        serviceId: s2.id,
+        title: "DNS lookup timeout",
+        severity: "medium",
+      },
+    });
+
+    // 1. Unfiltered query returns all
+    const allRes = await app.inject({
+      method: "GET",
+      url: "/api/incidents",
+    });
+    expect(allRes.statusCode).toBe(200);
+    const allIncidents = allRes.json();
+    expect(allIncidents).toHaveLength(2);
+
+    // 2. Filter by serviceId
+    const s1ResFilter = await app.inject({
+      method: "GET",
+      url: `/api/incidents?serviceId=${s1.id}`,
+    });
+    expect(s1ResFilter.statusCode).toBe(200);
+    const s1Incidents = s1ResFilter.json();
+    expect(s1Incidents).toHaveLength(1);
+    expect(s1Incidents[0].serviceId).toBe(s1.id);
+    expect(s1Incidents[0].title).toBe("Database connection failed");
+
+    // 3. Filter by status
+    const openRes = await app.inject({
+      method: "GET",
+      url: "/api/incidents?status=open",
+    });
+    expect(openRes.statusCode).toBe(200);
+    expect(openRes.json()).toHaveLength(2);
+
+    const resolvedRes = await app.inject({
+      method: "GET",
+      url: "/api/incidents?status=resolved",
+    });
+    expect(resolvedRes.statusCode).toBe(200);
+    expect(resolvedRes.json()).toHaveLength(0);
+  });
+});
+

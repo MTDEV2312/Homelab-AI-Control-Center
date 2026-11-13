@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { IncidentService } from "../services/incidentService.ts";
-import type { CreateIncidentInput } from "../interfaces/incident.ts";
+import type { CreateIncidentInput, IncidentStatus } from "../interfaces/incident.ts";
 
 export function registerIncidentsRoutes(
   app: FastifyInstance,
@@ -21,4 +21,11 @@ export function registerIncidentsRoutes(
 
     return reply.status(201).send(incident);
   });
+
+  app.get<{ Querystring: { serviceId?: string; status?: IncidentStatus } }>(
+    "/api/incidents",
+    async (request) => {
+      return incidentService.list(request.query);
+    }
+  );
 }
