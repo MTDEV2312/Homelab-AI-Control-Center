@@ -11,6 +11,8 @@ import type {
   HealthCheckResult,
 } from "../interfaces/service.ts";
 import type { OperationAction } from "../interfaces/operation.ts";
+import type { UptimeKumaMonitor } from "../interfaces/uptimeKuma.ts";
+import type { UptimeKumaService } from "./uptimeKumaService.ts";
 
 export interface ServicesListResult {
   summary: {
@@ -26,6 +28,7 @@ export interface ServicesListResult {
     lastCheckedAt: string;
     consecutiveFailures?: number;
     healthCheck?: HealthCheckResult;
+    uptimeKumaMonitor?: UptimeKumaMonitor;
   })[];
 }
 
@@ -33,6 +36,7 @@ export interface ServiceDetailResult extends Service {
   status: ServiceStatus;
   metrics: ContainerMetrics;
   healthCheck?: HealthCheckResult;
+  uptimeKumaMonitor?: UptimeKumaMonitor;
 }
 
 export function redactLogMessage(message: string): string {
@@ -47,12 +51,17 @@ export class ServiceManager {
   private services: Service[] = [];
   private dockerClient?: DockerClient;
   private healthChecks: Map<string, HealthCheckResult[]> = new Map();
+  private uptimeKumaService?: UptimeKumaService;
 
   constructor(options: { dockerClient?: DockerClient; initialServices?: Service[] } = {}) {
     this.dockerClient = options.dockerClient;
     if (options.initialServices) {
       this.services = [...options.initialServices];
     }
+  }
+
+  setUptimeKumaService(uptimeKumaService: UptimeKumaService): void {
+    this.uptimeKumaService = uptimeKumaService;
   }
 
   async register(data: {
@@ -77,6 +86,9 @@ export class ServiceManager {
     let online = 0;
     let unhealthy = 0;
     let dockerStatus: IntegrationHealth = "available";
+    const ukMonitors = this.uptimeKumaService
+      ? (await this.uptimeKumaService.listMonitors()).monitors
+      : [];
 
     const enrichedServices = await Promise.all(
       this.services.map(async (service) => {
@@ -112,6 +124,7 @@ export class ServiceManager {
           status,
           consecutiveFailures,
           healthCheck: checks.slice(-1)[0],
+          uptimeKumaMonitor: ukMonitors.find((m) => m.serviceId === service.id),
           lastCheckedAt: new Date().toISOString(),
         };
       })
@@ -164,11 +177,16 @@ export class ServiceManager {
       }
     }
 
+    const uptimeKumaMonitor = this.uptimeKumaService
+      ? await this.uptimeKumaService.getMonitorForService(service.id)
+      : undefined;
+
     return {
       ...service,
       status,
       metrics,
       healthCheck: this.healthChecks.get(service.id)?.slice(-1)[0],
+      uptimeKumaMonitor,
     };
   }
 

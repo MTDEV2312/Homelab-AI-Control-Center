@@ -56,7 +56,8 @@ export function buildApp(options: AppOptions = {}) {
     options.incidentService ?? new IncidentService(serviceManager);
   const uptimeKumaService =
     options.uptimeKumaService ??
-    new UptimeKumaService({ client: options.uptimeKumaClient });
+    new UptimeKumaService({ client: options.uptimeKumaClient, serviceManager });
+  serviceManager.setUptimeKumaService(uptimeKumaService);
   const assistantService =
     options.assistantService ??
     new AssistantService({

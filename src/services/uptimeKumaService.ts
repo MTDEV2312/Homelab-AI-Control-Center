@@ -1,3 +1,4 @@
+import type { ServiceManager } from "./serviceManager.ts";
 import type {
   UptimeKumaClient,
   UptimeKumaMonitor,
@@ -6,9 +7,12 @@ import type {
 
 export class UptimeKumaService {
   private client?: UptimeKumaClient;
+  private serviceManager?: ServiceManager;
+  private links: Map<string, string> = new Map();
 
-  constructor(options: { client?: UptimeKumaClient } = {}) {
+  constructor(options: { client?: UptimeKumaClient; serviceManager?: ServiceManager } = {}) {
     this.client = options.client;
+    this.serviceManager = options.serviceManager;
   }
 
   async listMonitors(): Promise<UptimeKumaMonitorsResult> {
@@ -22,11 +26,44 @@ export class UptimeKumaService {
     const rawMonitors = await this.client.getMonitors();
     const monitors: UptimeKumaMonitor[] = rawMonitors.map((m) => ({
       ...m,
+      ...(this.links.has(m.id) ? { serviceId: this.links.get(m.id) } : {}),
     }));
 
     return {
       integrationStatus: "available",
       monitors,
     };
+  }
+
+  async linkMonitor(monitorId: string, serviceId: string): Promise<UptimeKumaMonitor | null> {
+    if (this.serviceManager) {
+      const srv = await this.serviceManager.getById(serviceId);
+      if (!srv) {
+        return null;
+      }
+    }
+
+    const { monitors } = await this.listMonitors();
+    const target = monitors.find((m) => m.id === monitorId);
+    if (!target) {
+      return null;
+    }
+
+    for (const [mId, sId] of this.links.entries()) {
+      if (sId === serviceId) {
+        this.links.delete(mId);
+      }
+    }
+
+    this.links.set(monitorId, serviceId);
+    return {
+      ...target,
+      serviceId,
+    };
+  }
+
+  async getMonitorForService(serviceId: string): Promise<UptimeKumaMonitor | undefined> {
+    const { monitors } = await this.listMonitors();
+    return monitors.find((m) => m.serviceId === serviceId);
   }
 }
