@@ -273,4 +273,63 @@ describe("Dashboard component", () => {
     expect(wrapper.emitted("updateIncident")).toBeTruthy();
     expect(wrapper.emitted("updateIncident")?.[0]).toEqual(["inc-1", updatePayload]);
   });
+
+  it("renders Uptime Kuma unavailable banner, displays linked monitor badge on services, and embeds UptimeKumaMonitors in detail drawer", async () => {
+    const wrapper = mount(Dashboard, {
+      props: {
+        integrationStatus: { docker: "available", uptimeKuma: "unavailable" },
+        services: [
+          {
+            id: "srv-1",
+            name: "vaultwarden",
+            externalId: "vw-ctr",
+            integration: "docker",
+            status: "running",
+            uptimeKumaMonitor: {
+              id: "mon-vw",
+              name: "Vaultwarden Public Endpoint",
+              status: "down",
+              uptimePercent: 94.2,
+              latencyMs: 0,
+              serviceId: "srv-1",
+              heartbeats: [
+                { status: "down", timestamp: "2026-11-15T20:01:00Z", latencyMs: 0, message: "502 Bad Gateway" },
+              ],
+            },
+          },
+        ],
+        uptimeKumaMonitors: [
+          {
+            id: "mon-vw",
+            name: "Vaultwarden Public Endpoint",
+            status: "down",
+            uptimePercent: 94.2,
+            latencyMs: 0,
+            serviceId: "srv-1",
+            heartbeats: [
+              { status: "down", timestamp: "2026-11-15T20:01:00Z", latencyMs: 0, message: "502 Bad Gateway" },
+            ],
+          },
+        ],
+      },
+    });
+
+    // 1. Non-blocking unavailable banner
+    expect(wrapper.text()).toContain("Uptime Kuma Integration Unavailable");
+
+    // 2. Service item shows linked monitor status and uptime percentage alongside container status
+    const serviceItem = wrapper.find(".service-item");
+    expect(serviceItem.text()).toContain("running");
+    expect(serviceItem.find(".service-kuma-badge").exists()).toBe(true);
+    expect(serviceItem.find(".service-kuma-badge").text()).toContain("Kuma: down (94.2%)");
+
+    // 3. Clicking service opens detail drawer with UptimeKumaMonitors and forwards linkMonitor
+    await serviceItem.trigger("click");
+    const kumaComp = wrapper.findComponent({ name: "UptimeKumaMonitors" });
+    expect(kumaComp.exists()).toBe(true);
+
+    await kumaComp.vm.$emit("linkMonitor", "mon-vw", "srv-1");
+    expect(wrapper.emitted("linkMonitor")).toBeTruthy();
+    expect(wrapper.emitted("linkMonitor")?.[0]).toEqual(["mon-vw", "srv-1"]);
+  });
 });

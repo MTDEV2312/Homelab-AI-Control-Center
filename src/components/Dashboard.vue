@@ -13,6 +13,9 @@
       <div v-if="integrationStatus.docker === 'unavailable'" class="banner warning">
         Docker Integration Unavailable
       </div>
+      <div v-if="integrationStatus.uptimeKuma === 'unavailable'" class="banner warning">
+        Uptime Kuma Integration Unavailable
+      </div>
     </header>
 
     <section class="summary-cards">
@@ -41,6 +44,13 @@
           <span class="service-integration">{{ service.integration }}</span>
           <span v-if="service.healthCheck" class="service-latency">{{ service.healthCheck.latencyMs }}ms</span>
           <span v-if="service.consecutiveFailures" class="service-failures">{{ service.consecutiveFailures }} failed</span>
+          <span
+            v-if="service.uptimeKumaMonitor"
+            class="service-kuma-badge"
+            :class="service.uptimeKumaMonitor.status"
+          >
+            Kuma: {{ service.uptimeKumaMonitor.status }} ({{ service.uptimeKumaMonitor.uptimePercent }}%)
+          </span>
           <span class="service-status" :class="service.status">{{ service.status }}</span>
           <span class="service-checked">{{ service.lastCheckedAt }}</span>
         </li>
@@ -112,6 +122,12 @@
         @create-incident="(input) => emit('createIncident', input)"
         @update-incident="(id, input) => emit('updateIncident', id, input)"
       />
+
+      <UptimeKumaMonitors
+        :service-id="selectedService.id"
+        :monitors="uptimeKumaMonitors"
+        @link-monitor="(mId, sId) => emit('linkMonitor', mId, sId)"
+      />
     </aside>
   </div>
 </template>
@@ -123,10 +139,12 @@ import ServiceHealth from "./ServiceHealth.vue";
 import AiAssistant from "./AiAssistant.vue";
 import ServiceOperations from "./ServiceOperations.vue";
 import ServiceIncidents from "./ServiceIncidents.vue";
+import UptimeKumaMonitors from "./UptimeKumaMonitors.vue";
 import type { LogEntry, LogLevel, HealthCheckResult } from "../interfaces/service.ts";
 import type { DiagnosticResponse } from "../interfaces/assistant.ts";
 import type { OperationAction, PendingOperation, AuditEntry } from "../interfaces/operation.ts";
 import type { Incident, CreateIncidentInput, UpdateIncidentInput } from "../interfaces/incident.ts";
+import type { UptimeKumaMonitor } from "../interfaces/uptimeKuma.ts";
 
 export interface ServiceItem {
   id: string;
@@ -138,6 +156,7 @@ export interface ServiceItem {
   lastCheckedAt?: string;
   consecutiveFailures?: number;
   healthCheck?: HealthCheckResult;
+  uptimeKumaMonitor?: UptimeKumaMonitor;
   metrics?: {
     available: boolean;
     reason?: string;
@@ -162,7 +181,7 @@ export interface WebMcpStatus {
 const props = withDefaults(
   defineProps<{
     summary?: Summary;
-    integrationStatus?: { docker?: string };
+    integrationStatus?: { docker?: string; uptimeKuma?: string };
     services?: ServiceItem[];
     logs?: LogEntry[];
     healthHistory?: HealthCheckResult[];
@@ -175,6 +194,7 @@ const props = withDefaults(
     operationsLoading?: boolean;
     operationsError?: string | null;
     incidents?: Incident[];
+    uptimeKumaMonitors?: UptimeKumaMonitor[];
   }>(),
   {
     summary: () => ({ total: 0, online: 0, unhealthy: 0 }),
@@ -191,6 +211,7 @@ const props = withDefaults(
     operationsLoading: false,
     operationsError: null,
     incidents: () => [],
+    uptimeKumaMonitors: () => [],
   }
 );
 
@@ -205,6 +226,7 @@ const emit = defineEmits<{
   (e: "cancelOperation"): void;
   (e: "createIncident", input: CreateIncidentInput): void;
   (e: "updateIncident", id: string, input: UpdateIncidentInput): void;
+  (e: "linkMonitor", monitorId: string, serviceId: string): void;
 }>();
 
 const form = ref({

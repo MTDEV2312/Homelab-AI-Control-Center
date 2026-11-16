@@ -15,6 +15,7 @@
       :operations-loading="operationsLoading"
       :operations-error="operationsError"
       :incidents="activeIncidents"
+      :uptime-kuma-monitors="uptimeKumaMonitors"
       @register-service="handleRegister"
       @select-service="handleSelectService"
       @filter-logs="handleFilterLogs"
@@ -25,6 +26,7 @@
       @cancel-operation="handleCancelOperation"
       @create-incident="handleCreateIncident"
       @update-incident="handleUpdateIncident"
+      @link-monitor="handleLinkMonitor"
     />
   </main>
 </template>
@@ -37,10 +39,11 @@ import type { LogEntry, LogLevel, HealthCheckResult } from "./interfaces/service
 import type { DiagnosticResponse } from "./interfaces/assistant.ts";
 import type { OperationAction, PendingOperation, AuditEntry } from "./interfaces/operation.ts";
 import type { Incident, CreateIncidentInput, UpdateIncidentInput } from "./interfaces/incident.ts";
+import type { UptimeKumaMonitor } from "./interfaces/uptimeKuma.ts";
 
 const data = ref<{
   summary: Summary;
-  integrationStatus: { docker: string };
+  integrationStatus: { docker: string; uptimeKuma?: string };
   services: ServiceItem[];
 }>({
   summary: { total: 0, online: 0, unhealthy: 0 },
@@ -66,6 +69,35 @@ const activeAuditLog = ref<AuditEntry[]>([]);
 const operationsLoading = ref(false);
 const operationsError = ref<string | null>(null);
 const activeIncidents = ref<Incident[]>([]);
+const uptimeKumaMonitors = ref<UptimeKumaMonitor[]>([]);
+
+async function fetchUptimeKumaMonitors() {
+  try {
+    const res = await fetch("/api/uptime-kuma/monitors");
+    if (res.ok) {
+      const payload = await res.json();
+      uptimeKumaMonitors.value = payload.monitors || [];
+    }
+  } catch (error) {
+    console.error("Failed to fetch Uptime Kuma monitors", error);
+  }
+}
+
+async function handleLinkMonitor(monitorId: string, serviceId: string) {
+  try {
+    const res = await fetch(`/api/uptime-kuma/monitors/${monitorId}/link`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ serviceId }),
+    });
+    if (res.ok) {
+      await fetchUptimeKumaMonitors();
+      await loadServices();
+    }
+  } catch (error) {
+    console.error("Failed to link Uptime Kuma monitor", error);
+  }
+}
 
 async function fetchIncidents(serviceId?: string) {
   try {
@@ -267,6 +299,7 @@ async function handleSelectService(service: ServiceItem) {
     await fetchHealthHistory(service.id);
     await fetchAuditLog(service.id);
     await fetchIncidents(service.id);
+    await fetchUptimeKumaMonitors();
   } catch (error) {
     console.error("Failed to fetch service details", error);
   }
@@ -326,6 +359,7 @@ async function handleFilterLogs(filters: { query: string; level?: LogLevel }) {
 
 onMounted(() => {
   loadServices();
+  fetchUptimeKumaMonitors();
   initWebMcp();
 });
 </script>
