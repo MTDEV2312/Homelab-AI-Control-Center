@@ -179,3 +179,74 @@ describe("POST /api/uptime-kuma/monitors/:monitorId/link", () => {
     expect(badMonitorRes.statusCode).toBe(404);
   });
 });
+
+describe("Uptime Kuma graceful degradation", () => {
+  it("reports uptimeKuma integrationStatus as unavailable when Uptime Kuma fails without blocking Docker services", async () => {
+    const failingUptimeKumaClient: UptimeKumaClient = {
+      async getMonitors() {
+        throw new Error("Uptime Kuma connection refused");
+      },
+    };
+
+    const app = buildApp({
+      dockerClient: {
+        async getContainerStatus() {
+          return "running";
+        },
+      },
+      uptimeKumaClient: failingUptimeKumaClient,
+    });
+
+    const srvRes = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "jellyfin", externalId: "jf-ctr", integration: "docker" },
+    });
+    const service = srvRes.json();
+
+    // 1. GET /api/uptime-kuma/monitors degrades gracefully
+    const monitorsRes = await app.inject({
+      method: "GET",
+      url: "/api/uptime-kuma/monitors",
+    });
+    expect(monitorsRes.statusCode).toBe(200);
+    expect(monitorsRes.json()).toEqual({
+      integrationStatus: "unavailable",
+      monitors: [],
+    });
+
+    // 2. GET /api/services reports uptimeKuma: unavailable while Docker services remain online
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/api/services",
+    });
+    expect(listRes.statusCode).toBe(200);
+    const listBody = listRes.json();
+    expect(listBody.integrationStatus).toEqual({
+      docker: "available",
+      uptimeKuma: "unavailable",
+    });
+    expect(listBody.summary).toEqual({
+      total: 1,
+      online: 1,
+      unhealthy: 0,
+    });
+    expect(listBody.services[0]).toMatchObject({
+      id: service.id,
+      name: "jellyfin",
+      status: "running",
+    });
+
+    // 3. GET /api/services/:id still works when Uptime Kuma is down
+    const detailRes = await app.inject({
+      method: "GET",
+      url: `/api/services/${service.id}`,
+    });
+    expect(detailRes.statusCode).toBe(200);
+    expect(detailRes.json()).toMatchObject({
+      id: service.id,
+      name: "jellyfin",
+      status: "running",
+    });
+  });
+});

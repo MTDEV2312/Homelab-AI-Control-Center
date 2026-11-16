@@ -22,6 +22,7 @@ export interface ServicesListResult {
   };
   integrationStatus: {
     docker: IntegrationHealth;
+    uptimeKuma?: IntegrationHealth;
   };
   services: (Service & {
     status: ServiceStatus;
@@ -86,9 +87,13 @@ export class ServiceManager {
     let online = 0;
     let unhealthy = 0;
     let dockerStatus: IntegrationHealth = "available";
-    const ukMonitors = this.uptimeKumaService
-      ? (await this.uptimeKumaService.listMonitors()).monitors
-      : [];
+    let ukMonitors: UptimeKumaMonitor[] = [];
+    let uptimeKumaStatus: IntegrationHealth | undefined;
+    if (this.uptimeKumaService?.hasClient()) {
+      const ukResult = await this.uptimeKumaService.listMonitors();
+      ukMonitors = ukResult.monitors;
+      uptimeKumaStatus = ukResult.integrationStatus;
+    }
 
     const enrichedServices = await Promise.all(
       this.services.map(async (service) => {
@@ -138,6 +143,7 @@ export class ServiceManager {
       },
       integrationStatus: {
         docker: dockerStatus,
+        ...(uptimeKumaStatus ? { uptimeKuma: uptimeKumaStatus } : {}),
       },
       services: enrichedServices,
     };

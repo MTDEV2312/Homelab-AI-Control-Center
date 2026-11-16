@@ -15,6 +15,10 @@ export class UptimeKumaService {
     this.serviceManager = options.serviceManager;
   }
 
+  hasClient(): boolean {
+    return Boolean(this.client);
+  }
+
   async listMonitors(): Promise<UptimeKumaMonitorsResult> {
     if (!this.client) {
       return {
@@ -23,16 +27,23 @@ export class UptimeKumaService {
       };
     }
 
-    const rawMonitors = await this.client.getMonitors();
-    const monitors: UptimeKumaMonitor[] = rawMonitors.map((m) => ({
-      ...m,
-      ...(this.links.has(m.id) ? { serviceId: this.links.get(m.id) } : {}),
-    }));
+    try {
+      const rawMonitors = await this.client.getMonitors();
+      const monitors: UptimeKumaMonitor[] = rawMonitors.map((m) => ({
+        ...m,
+        ...(this.links.has(m.id) ? { serviceId: this.links.get(m.id) } : {}),
+      }));
 
-    return {
-      integrationStatus: "available",
-      monitors,
-    };
+      return {
+        integrationStatus: "available",
+        monitors,
+      };
+    } catch {
+      return {
+        integrationStatus: "unavailable",
+        monitors: [],
+      };
+    }
   }
 
   async linkMonitor(monitorId: string, serviceId: string): Promise<UptimeKumaMonitor | null> {
