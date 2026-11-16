@@ -4,12 +4,15 @@ import { registerToolsRoutes } from "./routes/tools.ts";
 import { registerAssistantRoutes } from "./routes/assistant.ts";
 import { registerOperationsRoutes } from "./routes/operations.ts";
 import { registerIncidentsRoutes } from "./routes/incidents.ts";
+import { registerUptimeKumaRoutes } from "./routes/uptimeKuma.ts";
 import { ServiceManager } from "./services/serviceManager.ts";
 import { ToolService } from "./services/toolService.ts";
 import { AssistantService } from "./services/assistantService.ts";
 import { OperationService } from "./services/operationService.ts";
 import { IncidentService } from "./services/incidentService.ts";
+import { UptimeKumaService } from "./services/uptimeKumaService.ts";
 import type { LlmProvider } from "./interfaces/assistant.ts";
+import type { UptimeKumaClient } from "./interfaces/uptimeKuma.ts";
 import type {
   DockerClient,
   Service,
@@ -25,6 +28,7 @@ export type {
   IntegrationHealth,
   ContainerMetrics,
   LlmProvider,
+  UptimeKumaClient,
 };
 
 export interface AppOptions {
@@ -34,6 +38,8 @@ export interface AppOptions {
   assistantService?: AssistantService;
   operationService?: OperationService;
   incidentService?: IncidentService;
+  uptimeKumaClient?: UptimeKumaClient;
+  uptimeKumaService?: UptimeKumaService;
   llmProvider?: LlmProvider;
 }
 
@@ -48,6 +54,9 @@ export function buildApp(options: AppOptions = {}) {
     options.operationService ?? new OperationService(serviceManager);
   const incidentService =
     options.incidentService ?? new IncidentService(serviceManager);
+  const uptimeKumaService =
+    options.uptimeKumaService ??
+    new UptimeKumaService({ client: options.uptimeKumaClient });
   const assistantService =
     options.assistantService ??
     new AssistantService({
@@ -61,6 +70,7 @@ export function buildApp(options: AppOptions = {}) {
   registerAssistantRoutes(app, { assistantService });
   registerOperationsRoutes(app, { operationService });
   registerIncidentsRoutes(app, { incidentService });
+  registerUptimeKumaRoutes(app, { uptimeKumaService });
 
   return app;
 }
