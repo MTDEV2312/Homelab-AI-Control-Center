@@ -89,3 +89,87 @@ describe("GET /api/n8n/workflows", () => {
     });
   });
 });
+
+describe("GET /api/n8n/executions/failed", () => {
+  it("returns failed executions with redacted error messages and supports workflowId and since filtering", async () => {
+    const mockN8nClient: N8nClient = {
+      async getWorkflows() {
+        return [];
+      },
+      async getExecutions() {
+        return [
+          {
+            id: "ex-1",
+            workflowId: "wf-1",
+            workflowName: "Nightly Database Backup",
+            status: "success",
+            startedAt: "2026-11-16T10:00:00Z",
+            stoppedAt: "2026-11-16T10:00:05Z",
+          },
+          {
+            id: "ex-2",
+            workflowId: "wf-2",
+            workflowName: "Alert Webhook Relay",
+            status: "error",
+            startedAt: "2026-11-16T12:00:00Z",
+            stoppedAt: "2026-11-16T12:00:03Z",
+            errorMessage: "Webhook auth rejected: Bearer sample_bearer_value",
+          },
+          {
+            id: "ex-3",
+            workflowId: "wf-3",
+            workflowName: "Backup Sync",
+            status: "error",
+            startedAt: "2026-11-16T20:00:00Z",
+            stoppedAt: "2026-11-16T20:00:04Z",
+            errorMessage: "Remote API rejected token=sample_token_value",
+          },
+        ];
+      },
+    };
+
+    const app = buildApp({ n8nClient: mockN8nClient });
+
+    // 1. Unfiltered returns only failed executions with redacted error messages
+    const allFailedRes = await app.inject({
+      method: "GET",
+      url: "/api/n8n/executions/failed",
+    });
+    expect(allFailedRes.statusCode).toBe(200);
+    const allFailedBody = allFailedRes.json();
+    expect(allFailedBody.integrationStatus).toBe("available");
+    expect(allFailedBody.executions).toHaveLength(2);
+    expect(allFailedBody.executions[0]).toMatchObject({
+      id: "ex-2",
+      workflowId: "wf-2",
+      workflowName: "Alert Webhook Relay",
+      status: "error",
+      errorMessage: "Webhook auth rejected: Bearer [REDACTED]",
+    });
+    expect(allFailedBody.executions[1]).toMatchObject({
+      id: "ex-3",
+      workflowId: "wf-3",
+      workflowName: "Backup Sync",
+      status: "error",
+      errorMessage: "Remote API rejected token=[REDACTED]",
+    });
+
+    // 2. Filter by workflowId
+    const byWfRes = await app.inject({
+      method: "GET",
+      url: "/api/n8n/executions/failed?workflowId=wf-2",
+    });
+    expect(byWfRes.statusCode).toBe(200);
+    expect(byWfRes.json().executions).toHaveLength(1);
+    expect(byWfRes.json().executions[0].id).toBe("ex-2");
+
+    // 3. Filter by since timestamp
+    const sinceRes = await app.inject({
+      method: "GET",
+      url: "/api/n8n/executions/failed?since=2026-11-16T18:00:00Z",
+    });
+    expect(sinceRes.statusCode).toBe(200);
+    expect(sinceRes.json().executions).toHaveLength(1);
+    expect(sinceRes.json().executions[0].id).toBe("ex-3");
+  });
+});

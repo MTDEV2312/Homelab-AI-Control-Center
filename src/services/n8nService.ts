@@ -1,6 +1,9 @@
+import { redactLogMessage } from "./serviceManager.ts";
 import type {
   N8nClient,
   N8nWorkflowsResult,
+  N8nFailedExecutionFilter,
+  N8nFailedExecutionsResult,
 } from "../interfaces/n8n.ts";
 
 export class N8nService {
@@ -34,6 +37,41 @@ export class N8nService {
         failedExecutions,
       },
       workflows,
+    };
+  }
+
+  async listFailedExecutions(
+    filter?: N8nFailedExecutionFilter
+  ): Promise<N8nFailedExecutionsResult> {
+    if (!this.client?.getExecutions) {
+      return {
+        integrationStatus: "available",
+        executions: [],
+      };
+    }
+
+    const rawExecutions = await this.client.getExecutions(filter);
+    let failed = rawExecutions.filter((e) => e.status === "error");
+
+    if (filter?.workflowId) {
+      failed = failed.filter((e) => e.workflowId === filter.workflowId);
+    }
+
+    if (filter?.since) {
+      const sinceMs = new Date(filter.since).getTime();
+      if (!isNaN(sinceMs)) {
+        failed = failed.filter((e) => new Date(e.startedAt).getTime() >= sinceMs);
+      }
+    }
+
+    const executions = failed.map((e) => ({
+      ...e,
+      ...(e.errorMessage ? { errorMessage: redactLogMessage(e.errorMessage) } : {}),
+    }));
+
+    return {
+      integrationStatus: "available",
+      executions,
     };
   }
 }

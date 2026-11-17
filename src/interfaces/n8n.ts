@@ -39,3 +39,8 @@ export interface N8nWorkflowsResult {
   };
   workflows: N8nWorkflow[];
 }
+
+export interface N8nFailedExecutionsResult {
+  integrationStatus: IntegrationHealth;
+  executions: N8nExecution[];
+}
