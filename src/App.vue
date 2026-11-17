@@ -16,6 +16,9 @@
       :operations-error="operationsError"
       :incidents="activeIncidents"
       :uptime-kuma-monitors="uptimeKumaMonitors"
+      :n8n-summary="n8nSummary"
+      :n8n-workflows="n8nWorkflows"
+      :n8n-failed-executions="n8nFailedExecutions"
       @register-service="handleRegister"
       @select-service="handleSelectService"
       @filter-logs="handleFilterLogs"
@@ -27,6 +30,7 @@
       @create-incident="handleCreateIncident"
       @update-incident="handleUpdateIncident"
       @link-monitor="handleLinkMonitor"
+      @filter-failed-executions="handleFilterFailedExecutions"
     />
   </main>
 </template>
@@ -40,10 +44,11 @@ import type { DiagnosticResponse } from "./interfaces/assistant.ts";
 import type { OperationAction, PendingOperation, AuditEntry } from "./interfaces/operation.ts";
 import type { Incident, CreateIncidentInput, UpdateIncidentInput } from "./interfaces/incident.ts";
 import type { UptimeKumaMonitor } from "./interfaces/uptimeKuma.ts";
+import type { N8nWorkflow, N8nExecution, N8nFailedExecutionFilter } from "./interfaces/n8n.ts";
 
 const data = ref<{
   summary: Summary;
-  integrationStatus: { docker: string; uptimeKuma?: string };
+  integrationStatus: { docker: string; uptimeKuma?: string; n8n?: string };
   services: ServiceItem[];
 }>({
   summary: { total: 0, online: 0, unhealthy: 0 },
@@ -70,6 +75,50 @@ const operationsLoading = ref(false);
 const operationsError = ref<string | null>(null);
 const activeIncidents = ref<Incident[]>([]);
 const uptimeKumaMonitors = ref<UptimeKumaMonitor[]>([]);
+const n8nSummary = ref<{ total: number; active: number; failedExecutions: number }>({
+  total: 0,
+  active: 0,
+  failedExecutions: 0,
+});
+const n8nWorkflows = ref<N8nWorkflow[]>([]);
+const n8nFailedExecutions = ref<N8nExecution[]>([]);
+
+async function fetchN8nData() {
+  try {
+    const [wfRes, execRes] = await Promise.all([
+      fetch("/api/n8n/workflows"),
+      fetch("/api/n8n/executions/failed"),
+    ]);
+    if (wfRes.ok) {
+      const wfPayload = await wfRes.json();
+      n8nSummary.value = wfPayload.summary || { total: 0, active: 0, failedExecutions: 0 };
+      n8nWorkflows.value = wfPayload.workflows || [];
+    }
+    if (execRes.ok) {
+      const execPayload = await execRes.json();
+      n8nFailedExecutions.value = execPayload.executions || [];
+    }
+  } catch (error) {
+    console.error("Failed to fetch n8n data", error);
+  }
+}
+
+async function handleFilterFailedExecutions(filter: N8nFailedExecutionFilter) {
+  try {
+    const params = new URLSearchParams();
+    if (filter.workflowId) params.append("workflowId", filter.workflowId);
+    if (filter.since) params.append("since", filter.since);
+
+    const query = params.toString();
+    const res = await fetch(`/api/n8n/executions/failed${query ? `?${query}` : ""}`);
+    if (res.ok) {
+      const payload = await res.json();
+      n8nFailedExecutions.value = payload.executions || [];
+    }
+  } catch (error) {
+    console.error("Failed to filter n8n failed executions", error);
+  }
+}
 
 async function fetchUptimeKumaMonitors() {
   try {
@@ -360,6 +409,7 @@ async function handleFilterLogs(filters: { query: string; level?: LogLevel }) {
 onMounted(() => {
   loadServices();
   fetchUptimeKumaMonitors();
+  fetchN8nData();
   initWebMcp();
 });
 </script>

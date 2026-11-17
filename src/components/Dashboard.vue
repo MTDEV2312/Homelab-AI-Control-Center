@@ -16,6 +16,9 @@
       <div v-if="integrationStatus.uptimeKuma === 'unavailable'" class="banner warning">
         Uptime Kuma Integration Unavailable
       </div>
+      <div v-if="integrationStatus.n8n === 'unavailable'" class="banner warning">
+        n8n Integration Unavailable
+      </div>
     </header>
 
     <section class="summary-cards">
@@ -129,6 +132,13 @@
         @link-monitor="(mId, sId) => emit('linkMonitor', mId, sId)"
       />
     </aside>
+
+    <N8nWorkflows
+      :summary="n8nSummary"
+      :workflows="n8nWorkflows"
+      :failed-executions="n8nFailedExecutions"
+      @filter-failed-executions="(f) => emit('filterFailedExecutions', f)"
+    />
   </div>
 </template>
 
@@ -140,11 +150,13 @@ import AiAssistant from "./AiAssistant.vue";
 import ServiceOperations from "./ServiceOperations.vue";
 import ServiceIncidents from "./ServiceIncidents.vue";
 import UptimeKumaMonitors from "./UptimeKumaMonitors.vue";
+import N8nWorkflows from "./N8nWorkflows.vue";
 import type { LogEntry, LogLevel, HealthCheckResult } from "../interfaces/service.ts";
 import type { DiagnosticResponse } from "../interfaces/assistant.ts";
 import type { OperationAction, PendingOperation, AuditEntry } from "../interfaces/operation.ts";
 import type { Incident, CreateIncidentInput, UpdateIncidentInput } from "../interfaces/incident.ts";
 import type { UptimeKumaMonitor } from "../interfaces/uptimeKuma.ts";
+import type { N8nWorkflow, N8nExecution, N8nFailedExecutionFilter } from "../interfaces/n8n.ts";
 
 export interface ServiceItem {
   id: string;
@@ -181,7 +193,7 @@ export interface WebMcpStatus {
 const props = withDefaults(
   defineProps<{
     summary?: Summary;
-    integrationStatus?: { docker?: string; uptimeKuma?: string };
+    integrationStatus?: { docker?: string; uptimeKuma?: string; n8n?: string };
     services?: ServiceItem[];
     logs?: LogEntry[];
     healthHistory?: HealthCheckResult[];
@@ -195,6 +207,9 @@ const props = withDefaults(
     operationsError?: string | null;
     incidents?: Incident[];
     uptimeKumaMonitors?: UptimeKumaMonitor[];
+    n8nSummary?: { total: number; active: number; failedExecutions: number };
+    n8nWorkflows?: N8nWorkflow[];
+    n8nFailedExecutions?: N8nExecution[];
   }>(),
   {
     summary: () => ({ total: 0, online: 0, unhealthy: 0 }),
@@ -212,6 +227,9 @@ const props = withDefaults(
     operationsError: null,
     incidents: () => [],
     uptimeKumaMonitors: () => [],
+    n8nSummary: () => ({ total: 0, active: 0, failedExecutions: 0 }),
+    n8nWorkflows: () => [],
+    n8nFailedExecutions: () => [],
   }
 );
 
@@ -227,6 +245,7 @@ const emit = defineEmits<{
   (e: "createIncident", input: CreateIncidentInput): void;
   (e: "updateIncident", id: string, input: UpdateIncidentInput): void;
   (e: "linkMonitor", monitorId: string, serviceId: string): void;
+  (e: "filterFailedExecutions", filter: N8nFailedExecutionFilter): void;
 }>();
 
 const form = ref({

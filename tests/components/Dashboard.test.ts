@@ -332,4 +332,51 @@ describe("Dashboard component", () => {
     expect(wrapper.emitted("linkMonitor")).toBeTruthy();
     expect(wrapper.emitted("linkMonitor")?.[0]).toEqual(["mon-vw", "srv-1"]);
   });
+
+  it("renders n8n unavailable warning banner and embeds N8nWorkflows panel forwarding filter events", async () => {
+    const wrapper = mount(Dashboard, {
+      props: {
+        integrationStatus: { docker: "available", n8n: "unavailable" },
+        n8nSummary: { total: 2, active: 1, failedExecutions: 1 },
+        n8nWorkflows: [
+          {
+            id: "wf-1",
+            name: "Nightly Database Backup",
+            active: true,
+            lastExecutionStatus: "success",
+          },
+          {
+            id: "wf-2",
+            name: "Alert Webhook Relay",
+            active: false,
+            lastExecutionStatus: "error",
+          },
+        ],
+        n8nFailedExecutions: [
+          {
+            id: "ex-2",
+            workflowId: "wf-2",
+            workflowName: "Alert Webhook Relay",
+            status: "error",
+            startedAt: "2026-11-16T12:00:00Z",
+            errorMessage: "Webhook auth rejected: Bearer [REDACTED]",
+          },
+        ],
+      },
+    });
+
+    // 1. Non-blocking n8n unavailable warning banner
+    expect(wrapper.text()).toContain("n8n Integration Unavailable");
+
+    // 2. Embeds N8nWorkflows with workflows and failed executions
+    const n8nComp = wrapper.findComponent({ name: "N8nWorkflows" });
+    expect(n8nComp.exists()).toBe(true);
+    expect(n8nComp.text()).toContain("Nightly Database Backup");
+    expect(n8nComp.text()).toContain("Webhook auth rejected: Bearer [REDACTED]");
+
+    // 3. Forwards filterFailedExecutions event
+    await n8nComp.vm.$emit("filterFailedExecutions", { workflowId: "wf-2" });
+    expect(wrapper.emitted("filterFailedExecutions")).toBeTruthy();
+    expect(wrapper.emitted("filterFailedExecutions")?.[0]).toEqual([{ workflowId: "wf-2" }]);
+  });
 });
