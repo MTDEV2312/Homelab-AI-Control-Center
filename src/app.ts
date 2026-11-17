@@ -66,6 +66,7 @@ export function buildApp(options: AppOptions = {}) {
   serviceManager.setUptimeKumaService(uptimeKumaService);
   const n8nService =
     options.n8nService ?? new N8nService({ client: options.n8nClient });
+  serviceManager.setN8nService(n8nService);
   const assistantService =
     options.assistantService ??
     new AssistantService({

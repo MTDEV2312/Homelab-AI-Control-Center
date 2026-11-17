@@ -13,6 +13,7 @@ import type {
 import type { OperationAction } from "../interfaces/operation.ts";
 import type { UptimeKumaMonitor } from "../interfaces/uptimeKuma.ts";
 import type { UptimeKumaService } from "./uptimeKumaService.ts";
+import type { N8nService } from "./n8nService.ts";
 
 export interface ServicesListResult {
   summary: {
@@ -23,6 +24,7 @@ export interface ServicesListResult {
   integrationStatus: {
     docker: IntegrationHealth;
     uptimeKuma?: IntegrationHealth;
+    n8n?: IntegrationHealth;
   };
   services: (Service & {
     status: ServiceStatus;
@@ -53,6 +55,7 @@ export class ServiceManager {
   private dockerClient?: DockerClient;
   private healthChecks: Map<string, HealthCheckResult[]> = new Map();
   private uptimeKumaService?: UptimeKumaService;
+  private n8nService?: N8nService;
 
   constructor(options: { dockerClient?: DockerClient; initialServices?: Service[] } = {}) {
     this.dockerClient = options.dockerClient;
@@ -63,6 +66,10 @@ export class ServiceManager {
 
   setUptimeKumaService(uptimeKumaService: UptimeKumaService): void {
     this.uptimeKumaService = uptimeKumaService;
+  }
+
+  setN8nService(n8nService: N8nService): void {
+    this.n8nService = n8nService;
   }
 
   async register(data: {
@@ -93,6 +100,11 @@ export class ServiceManager {
       const ukResult = await this.uptimeKumaService.listMonitors();
       ukMonitors = ukResult.monitors;
       uptimeKumaStatus = ukResult.integrationStatus;
+    }
+    let n8nStatus: IntegrationHealth | undefined;
+    if (this.n8nService?.hasClient()) {
+      const n8nResult = await this.n8nService.listWorkflows();
+      n8nStatus = n8nResult.integrationStatus;
     }
 
     const enrichedServices = await Promise.all(
@@ -144,6 +156,7 @@ export class ServiceManager {
       integrationStatus: {
         docker: dockerStatus,
         ...(uptimeKumaStatus ? { uptimeKuma: uptimeKumaStatus } : {}),
+        ...(n8nStatus ? { n8n: n8nStatus } : {}),
       },
       services: enrichedServices,
     };

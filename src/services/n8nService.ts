@@ -13,6 +13,10 @@ export class N8nService {
     this.client = options.client;
   }
 
+  hasClient(): boolean {
+    return Boolean(this.client);
+  }
+
   async listWorkflows(): Promise<N8nWorkflowsResult> {
     if (!this.client) {
       return {
@@ -22,22 +26,30 @@ export class N8nService {
       };
     }
 
-    const workflows = await this.client.getWorkflows();
-    const executions = this.client.getExecutions
-      ? await this.client.getExecutions()
-      : [];
-    const active = workflows.filter((w) => w.active).length;
-    const failedExecutions = executions.filter((e) => e.status === "error").length;
+    try {
+      const workflows = await this.client.getWorkflows();
+      const executions = this.client.getExecutions
+        ? await this.client.getExecutions()
+        : [];
+      const active = workflows.filter((w) => w.active).length;
+      const failedExecutions = executions.filter((e) => e.status === "error").length;
 
-    return {
-      integrationStatus: "available",
-      summary: {
-        total: workflows.length,
-        active,
-        failedExecutions,
-      },
-      workflows,
-    };
+      return {
+        integrationStatus: "available",
+        summary: {
+          total: workflows.length,
+          active,
+          failedExecutions,
+        },
+        workflows,
+      };
+    } catch {
+      return {
+        integrationStatus: "unavailable",
+        summary: { total: 0, active: 0, failedExecutions: 0 },
+        workflows: [],
+      };
+    }
   }
 
   async listFailedExecutions(
@@ -50,28 +62,35 @@ export class N8nService {
       };
     }
 
-    const rawExecutions = await this.client.getExecutions(filter);
-    let failed = rawExecutions.filter((e) => e.status === "error");
+    try {
+      const rawExecutions = await this.client.getExecutions(filter);
+      let failed = rawExecutions.filter((e) => e.status === "error");
 
-    if (filter?.workflowId) {
-      failed = failed.filter((e) => e.workflowId === filter.workflowId);
-    }
-
-    if (filter?.since) {
-      const sinceMs = new Date(filter.since).getTime();
-      if (!isNaN(sinceMs)) {
-        failed = failed.filter((e) => new Date(e.startedAt).getTime() >= sinceMs);
+      if (filter?.workflowId) {
+        failed = failed.filter((e) => e.workflowId === filter.workflowId);
       }
+
+      if (filter?.since) {
+        const sinceMs = new Date(filter.since).getTime();
+        if (!isNaN(sinceMs)) {
+          failed = failed.filter((e) => new Date(e.startedAt).getTime() >= sinceMs);
+        }
+      }
+
+      const executions = failed.map((e) => ({
+        ...e,
+        ...(e.errorMessage ? { errorMessage: redactLogMessage(e.errorMessage) } : {}),
+      }));
+
+      return {
+        integrationStatus: "available",
+        executions,
+      };
+    } catch {
+      return {
+        integrationStatus: "unavailable",
+        executions: [],
+      };
     }
-
-    const executions = failed.map((e) => ({
-      ...e,
-      ...(e.errorMessage ? { errorMessage: redactLogMessage(e.errorMessage) } : {}),
-    }));
-
-    return {
-      integrationStatus: "available",
-      executions,
-    };
   }
 }

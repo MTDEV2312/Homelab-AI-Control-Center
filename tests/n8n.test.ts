@@ -173,3 +173,90 @@ describe("GET /api/n8n/executions/failed", () => {
     expect(sinceRes.json().executions[0].id).toBe("ex-3");
   });
 });
+
+describe("n8n graceful degradation", () => {
+  it("reports n8n integrationStatus as unavailable when n8n fails without blocking Docker or Uptime Kuma", async () => {
+    const failingN8nClient: N8nClient = {
+      async getWorkflows() {
+        throw new Error("n8n API connection refused");
+      },
+      async getExecutions() {
+        throw new Error("n8n API connection refused");
+      },
+    };
+
+    const app = buildApp({
+      dockerClient: {
+        async getContainerStatus() {
+          return "running";
+        },
+      },
+      uptimeKumaClient: {
+        async getMonitors() {
+          return [
+            {
+              id: "mon-1",
+              name: "Jellyfin HTTPS",
+              status: "up",
+              uptimePercent: 99.9,
+              latencyMs: 30,
+              heartbeats: [],
+            },
+          ];
+        },
+      },
+      n8nClient: failingN8nClient,
+    });
+
+    await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "jellyfin", externalId: "jf-ctr", integration: "docker" },
+    });
+
+    // 1. GET /api/n8n/workflows degrades gracefully
+    const wfRes = await app.inject({
+      method: "GET",
+      url: "/api/n8n/workflows",
+    });
+    expect(wfRes.statusCode).toBe(200);
+    expect(wfRes.json()).toEqual({
+      integrationStatus: "unavailable",
+      summary: { total: 0, active: 0, failedExecutions: 0 },
+      workflows: [],
+    });
+
+    // 2. GET /api/n8n/executions/failed degrades gracefully
+    const failedRes = await app.inject({
+      method: "GET",
+      url: "/api/n8n/executions/failed",
+    });
+    expect(failedRes.statusCode).toBe(200);
+    expect(failedRes.json()).toEqual({
+      integrationStatus: "unavailable",
+      executions: [],
+    });
+
+    // 3. GET /api/services reports n8n: unavailable while Docker and Uptime Kuma remain available
+    const servicesRes = await app.inject({
+      method: "GET",
+      url: "/api/services",
+    });
+    expect(servicesRes.statusCode).toBe(200);
+    const servicesBody = servicesRes.json();
+    expect(servicesBody.integrationStatus).toEqual({
+      docker: "available",
+      uptimeKuma: "available",
+      n8n: "unavailable",
+    });
+    expect(servicesBody.summary).toEqual({
+      total: 1,
+      online: 1,
+      unhealthy: 0,
+    });
+    expect(servicesBody.services[0]).toMatchObject({
+      name: "jellyfin",
+      status: "running",
+    });
+  });
+});
