@@ -379,4 +379,48 @@ describe("Dashboard component", () => {
     expect(wrapper.emitted("filterFailedExecutions")).toBeTruthy();
     expect(wrapper.emitted("filterFailedExecutions")?.[0]).toEqual([{ workflowId: "wf-2" }]);
   });
+
+  it("renders MCP Server status badge and surfaces pending MCP-requested operation in service detail drawer for human confirmation", async () => {
+    const wrapper = mount(Dashboard, {
+      props: {
+        mcpServerStatus: { enabled: true, toolCount: 5 },
+        services: [
+          {
+            id: "srv-1",
+            name: "vaultwarden",
+            externalId: "vw-ctr",
+            integration: "docker",
+            status: "running",
+          },
+        ],
+        pendingOperation: {
+          id: "op-mcp-1",
+          serviceId: "srv-1",
+          action: "restart",
+          riskLevel: "L2",
+          status: "pending",
+          actor: "mcp",
+          expiresAt: new Date(Date.now() + 300000).toISOString(),
+          confirmationToken: "token-mcp-1",
+          createdAt: new Date().toISOString(),
+        },
+      },
+    });
+
+    // 1. Renders MCP Server status badge in header
+    const mcpBadge = wrapper.find(".mcp-server-status");
+    expect(mcpBadge.exists()).toBe(true);
+    expect(mcpBadge.text()).toContain("MCP Server Active (5 tools)");
+
+    // 2. Selecting service surfaces the MCP-requested pending operation in the detail drawer for confirmation
+    await wrapper.find(".service-item").trigger("click");
+    const confirmBox = wrapper.find(".confirmation-dialog");
+    expect(confirmBox.exists()).toBe(true);
+    expect(confirmBox.text()).toContain("L2");
+    expect(confirmBox.text()).toContain("restart");
+
+    await confirmBox.find(".btn-confirm").trigger("click");
+    expect(wrapper.emitted("confirmOperation")).toBeTruthy();
+    expect(wrapper.emitted("confirmOperation")?.[0]).toEqual(["op-mcp-1", "token-mcp-1"]);
+  });
 });

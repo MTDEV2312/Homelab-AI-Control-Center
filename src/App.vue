@@ -7,6 +7,7 @@
       :logs="activeLogs"
       :health-history="activeHealthHistory"
       :webmcp-status="webmcpStatus"
+      :mcp-server-status="mcpServerStatus"
       :assistant-response="assistantResponse"
       :assistant-loading="assistantLoading"
       :assistant-error="assistantError"
@@ -45,6 +46,7 @@ import type { OperationAction, PendingOperation, AuditEntry } from "./interfaces
 import type { Incident, CreateIncidentInput, UpdateIncidentInput } from "./interfaces/incident.ts";
 import type { UptimeKumaMonitor } from "./interfaces/uptimeKuma.ts";
 import type { N8nWorkflow, N8nExecution, N8nFailedExecutionFilter } from "./interfaces/n8n.ts";
+import type { McpServerStatus } from "./interfaces/mcp.ts";
 
 const data = ref<{
   summary: Summary;
@@ -60,6 +62,7 @@ const webmcpStatus = ref<WebMcpStatus>({
   supported: false,
   registeredCount: 0,
 });
+const mcpServerStatus = ref<McpServerStatus | null>(null);
 
 const activeLogs = ref<LogEntry[]>([]);
 const activeHealthHistory = ref<HealthCheckResult[]>([]);
@@ -117,6 +120,29 @@ async function handleFilterFailedExecutions(filter: N8nFailedExecutionFilter) {
     }
   } catch (error) {
     console.error("Failed to filter n8n failed executions", error);
+  }
+}
+
+async function fetchMcpServerStatus() {
+  try {
+    const res = await fetch("/api/mcp/status");
+    if (res.ok) {
+      mcpServerStatus.value = await res.json();
+    }
+  } catch (error) {
+    console.error("Failed to fetch MCP server status", error);
+  }
+}
+
+async function fetchPendingOperations(serviceId: string) {
+  try {
+    const res = await fetch(`/api/operations/pending?serviceId=${serviceId}`);
+    if (res.ok) {
+      const pending: PendingOperation[] = await res.json();
+      pendingOperation.value = pending[0] ?? null;
+    }
+  } catch (error) {
+    console.error("Failed to fetch pending operations", error);
   }
 }
 
@@ -349,6 +375,7 @@ async function handleSelectService(service: ServiceItem) {
     await fetchAuditLog(service.id);
     await fetchIncidents(service.id);
     await fetchUptimeKumaMonitors();
+    await fetchPendingOperations(service.id);
   } catch (error) {
     console.error("Failed to fetch service details", error);
   }
@@ -410,6 +437,7 @@ onMounted(() => {
   loadServices();
   fetchUptimeKumaMonitors();
   fetchN8nData();
+  fetchMcpServerStatus();
   initWebMcp();
 });
 </script>
@@ -431,18 +459,26 @@ body {
   justify-content: space-between;
   align-items: center;
 }
-.webmcp-status {
+.header-badges {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.webmcp-status,
+.mcp-server-status {
   padding: 0.3rem 0.65rem;
   border-radius: 6px;
   font-size: 0.85rem;
   font-weight: 600;
 }
-.webmcp-status.active {
+.webmcp-status.active,
+.mcp-server-status.active {
   background: #064e3b;
   color: #6ee7b7;
   border: 1px solid #059669;
 }
-.webmcp-status.inactive {
+.webmcp-status.inactive,
+.mcp-server-status.inactive {
   background: #1e293b;
   color: #94a3b8;
   border: 1px solid #334155;

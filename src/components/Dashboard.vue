@@ -3,12 +3,21 @@
     <header class="dashboard-header">
       <div class="header-main">
         <h1>Homelab Control Center</h1>
-        <span
-          class="webmcp-status"
-          :class="{ active: webmcpStatus?.supported, inactive: !webmcpStatus?.supported }"
-        >
-          {{ webmcpStatus?.supported ? `WebMCP Active (${webmcpStatus.registeredCount} tools)` : 'WebMCP Unavailable' }}
-        </span>
+        <div class="header-badges">
+          <span
+            v-if="mcpServerStatus"
+            class="mcp-server-status"
+            :class="{ active: mcpServerStatus.enabled, inactive: !mcpServerStatus.enabled }"
+          >
+            {{ mcpServerStatus.enabled ? `MCP Server Active (${mcpServerStatus.toolCount} tools)` : 'MCP Server Inactive' }}
+          </span>
+          <span
+            class="webmcp-status"
+            :class="{ active: webmcpStatus?.supported, inactive: !webmcpStatus?.supported }"
+          >
+            {{ webmcpStatus?.supported ? `WebMCP Active (${webmcpStatus.registeredCount} tools)` : 'WebMCP Unavailable' }}
+          </span>
+        </div>
       </div>
       <div v-if="integrationStatus.docker === 'unavailable'" class="banner warning">
         Docker Integration Unavailable
@@ -157,6 +166,7 @@ import type { OperationAction, PendingOperation, AuditEntry } from "../interface
 import type { Incident, CreateIncidentInput, UpdateIncidentInput } from "../interfaces/incident.ts";
 import type { UptimeKumaMonitor } from "../interfaces/uptimeKuma.ts";
 import type { N8nWorkflow, N8nExecution, N8nFailedExecutionFilter } from "../interfaces/n8n.ts";
+import type { McpServerStatus } from "../interfaces/mcp.ts";
 
 export interface ServiceItem {
   id: string;
@@ -198,6 +208,7 @@ const props = withDefaults(
     logs?: LogEntry[];
     healthHistory?: HealthCheckResult[];
     webmcpStatus?: WebMcpStatus;
+    mcpServerStatus?: McpServerStatus | null;
     assistantResponse?: DiagnosticResponse | null;
     assistantLoading?: boolean;
     assistantError?: string | null;
@@ -218,6 +229,7 @@ const props = withDefaults(
     logs: () => [],
     healthHistory: () => [],
     webmcpStatus: () => ({ supported: false, registeredCount: 0 }),
+    mcpServerStatus: null,
     assistantResponse: null,
     assistantLoading: false,
     assistantError: null,
