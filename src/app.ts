@@ -6,6 +6,7 @@ import { registerOperationsRoutes } from "./routes/operations.ts";
 import { registerIncidentsRoutes } from "./routes/incidents.ts";
 import { registerUptimeKumaRoutes } from "./routes/uptimeKuma.ts";
 import { registerN8nRoutes } from "./routes/n8n.ts";
+import { registerMcpRoutes } from "./routes/mcp.ts";
 import { ServiceManager } from "./services/serviceManager.ts";
 import { ToolService } from "./services/toolService.ts";
 import { AssistantService } from "./services/assistantService.ts";
@@ -13,6 +14,7 @@ import { OperationService } from "./services/operationService.ts";
 import { IncidentService } from "./services/incidentService.ts";
 import { UptimeKumaService } from "./services/uptimeKumaService.ts";
 import { N8nService } from "./services/n8nService.ts";
+import { McpService } from "./services/mcpService.ts";
 import type { LlmProvider } from "./interfaces/assistant.ts";
 import type { UptimeKumaClient } from "./interfaces/uptimeKuma.ts";
 import type { N8nClient } from "./interfaces/n8n.ts";
@@ -46,6 +48,7 @@ export interface AppOptions {
   uptimeKumaService?: UptimeKumaService;
   n8nClient?: N8nClient;
   n8nService?: N8nService;
+  mcpService?: McpService;
   llmProvider?: LlmProvider;
 }
 
@@ -67,6 +70,9 @@ export function buildApp(options: AppOptions = {}) {
   const n8nService =
     options.n8nService ?? new N8nService({ client: options.n8nClient });
   serviceManager.setN8nService(n8nService);
+  const mcpService =
+    options.mcpService ??
+    new McpService({ toolService, incidentService, operationService });
   const assistantService =
     options.assistantService ??
     new AssistantService({
@@ -82,6 +88,7 @@ export function buildApp(options: AppOptions = {}) {
   registerIncidentsRoutes(app, { incidentService });
   registerUptimeKumaRoutes(app, { uptimeKumaService });
   registerN8nRoutes(app, { n8nService });
+  registerMcpRoutes(app, { mcpService });
 
   return app;
 }
