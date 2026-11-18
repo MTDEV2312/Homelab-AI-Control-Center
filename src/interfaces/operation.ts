@@ -8,6 +8,7 @@ export interface PendingOperation {
   action: OperationAction;
   riskLevel: RiskLevel;
   status: OperationStatus;
+  actor?: string;
   expiresAt: string;
   confirmationToken: string;
   createdAt: string;

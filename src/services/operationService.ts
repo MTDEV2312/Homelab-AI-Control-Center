@@ -65,6 +65,7 @@ export class OperationService {
       action: data.action,
       riskLevel,
       status: "pending",
+      actor,
       expiresAt,
       confirmationToken,
       createdAt: now.toISOString(),
@@ -136,6 +137,16 @@ export class OperationService {
       operation: op,
       auditEntry,
     };
+  }
+
+  listPendingOperations(options?: { serviceId?: string }): PendingOperation[] {
+    const all = Array.from(this.pendingOperations.values()).filter(
+      (op) => op.status === "pending"
+    );
+    if (options?.serviceId) {
+      return all.filter((op) => op.serviceId === options.serviceId);
+    }
+    return all;
   }
 
   getAuditLog(options?: { serviceId?: string }): AuditEntry[] {

@@ -131,6 +131,19 @@ export class McpService {
             status: args.status,
           });
           data = { incidents };
+        } else if (toolName === "request_service_operation") {
+          if (!args.service_id || !args.action) {
+            throw new Error("Missing required parameters: service_id and action");
+          }
+          const opResult = await this.operationService.requestOperation({
+            serviceId: args.service_id,
+            action: args.action,
+            actor: "mcp",
+          });
+          if ("error" in opResult) {
+            throw new Error(opResult.error);
+          }
+          data = opResult;
         } else {
           return {
             jsonrpc: "2.0",

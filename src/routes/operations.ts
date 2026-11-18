@@ -54,6 +54,14 @@ export function registerOperationsRoutes(
     Querystring: {
       serviceId?: string;
     };
+  }>("/api/operations/pending", async (request) => {
+    return operationService.listPendingOperations(request.query);
+  });
+
+  app.get<{
+    Querystring: {
+      serviceId?: string;
+    };
   }>("/api/audit", async (request) => {
     return operationService.getAuditLog(request.query);
   });

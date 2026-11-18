@@ -218,3 +218,121 @@ describe("POST /api/mcp (tools/call read tools)", () => {
     });
   });
 });
+
+describe("POST /api/mcp (tools/call request_service_operation)", () => {
+  it("creates a pending operation (L2/L3) with actor mcp without executing container action, and audits rejected policy violations", async () => {
+    const executedActions: string[] = [];
+
+    const app = buildApp({
+      dockerClient: {
+        async getContainerStatus() {
+          return "running";
+        },
+        async executeContainerAction(containerId, action) {
+          executedActions.push(`${containerId}:${action}`);
+        },
+      },
+    });
+
+    const srvRes = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: {
+        name: "vaultwarden",
+        externalId: "vw-ctr",
+        integration: "docker",
+        allowedActions: ["restart", "start"],
+      },
+    });
+    const service = srvRes.json();
+
+    // 1. Allowed action creates pending operation attributed to mcp without autonomous execution
+    const reqOpRes = await app.inject({
+      method: "POST",
+      url: "/api/mcp",
+      payload: {
+        jsonrpc: "2.0",
+        id: 20,
+        method: "tools/call",
+        params: {
+          name: "request_service_operation",
+          arguments: {
+            service_id: service.id,
+            action: "restart",
+          },
+        },
+      },
+    });
+
+    expect(reqOpRes.statusCode).toBe(200);
+    const reqOpBody = reqOpRes.json();
+    expect(reqOpBody.result.isError).toBe(false);
+    const pendingOp = reqOpBody.result.data.operation;
+    expect(pendingOp).toMatchObject({
+      serviceId: service.id,
+      action: "restart",
+      riskLevel: "L2",
+      status: "pending",
+      actor: "mcp",
+    });
+    expect(pendingOp.confirmationToken).toBeDefined();
+    expect(executedActions).toHaveLength(0);
+
+    // Pending operation is queryable for the Control Center UI
+    const pendingListRes = await app.inject({
+      method: "GET",
+      url: `/api/operations/pending?serviceId=${service.id}`,
+    });
+    expect(pendingListRes.statusCode).toBe(200);
+    expect(pendingListRes.json()).toHaveLength(1);
+    expect(pendingListRes.json()[0].id).toBe(pendingOp.id);
+
+    // Human admin confirms the pending operation
+    const confirmRes = await app.inject({
+      method: "POST",
+      url: `/api/operations/${pendingOp.id}/confirm`,
+      payload: { confirmationToken: pendingOp.confirmationToken },
+    });
+    expect(confirmRes.statusCode).toBe(200);
+    expect(executedActions).toEqual(["vw-ctr:restart"]);
+
+    // 2. Disallowed action (stop) is rejected and audited with actor: mcp
+    const disallowedRes = await app.inject({
+      method: "POST",
+      url: "/api/mcp",
+      payload: {
+        jsonrpc: "2.0",
+        id: 21,
+        method: "tools/call",
+        params: {
+          name: "request_service_operation",
+          arguments: {
+            service_id: service.id,
+            action: "stop",
+          },
+        },
+      },
+    });
+
+    expect(disallowedRes.statusCode).toBe(200);
+    const disallowedBody = disallowedRes.json();
+    expect(disallowedBody.error).toBeDefined();
+    expect(disallowedBody.error.message).toContain("not permitted by policy");
+    expect(executedActions).toEqual(["vw-ctr:restart"]);
+
+    const auditRes = await app.inject({
+      method: "GET",
+      url: `/api/audit?serviceId=${service.id}`,
+    });
+    const auditLog = auditRes.json();
+    expect(auditLog).toContainEqual(
+      expect.objectContaining({
+        actor: "mcp",
+        action: "stop",
+        riskLevel: "L3",
+        serviceId: service.id,
+        outcome: "rejected",
+      })
+    );
+  });
+});
