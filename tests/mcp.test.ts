@@ -79,3 +79,142 @@ describe("POST /api/mcp (initialize & tools/list)", () => {
     });
   });
 });
+
+describe("POST /api/mcp (tools/call read tools)", () => {
+  it("executes read tools (list_services, get_service_status, search_logs with redaction, and list_incidents with filters) using shared services", async () => {
+    const app = buildApp({
+      dockerClient: {
+        async getContainerStatus() {
+          return "running";
+        },
+        async getContainerMetrics() {
+          return {
+            cpuPercent: 18.4,
+            memoryUsedBytes: 256000000,
+            memoryLimitBytes: 1024000000,
+            uptimeSeconds: 7200,
+          };
+        },
+        async getContainerLogs() {
+          return [
+            {
+              timestamp: "2026-11-17T22:00:00Z",
+              level: "error",
+              message: "Upstream failed with Bearer sample_bearer_value",
+            },
+          ];
+        },
+      },
+    });
+
+    const srvRes = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: { name: "jellyfin", externalId: "jf-ctr", integration: "docker" },
+    });
+    const service = srvRes.json();
+
+    await app.inject({
+      method: "POST",
+      url: "/api/incidents",
+      payload: {
+        serviceId: service.id,
+        title: "Gateway timeout",
+        severity: "high",
+        hypotheses: ["Proxy misconfiguration"],
+      },
+    });
+
+    // 1. list_services via MCP tools/call
+    const listServicesRes = await app.inject({
+      method: "POST",
+      url: "/api/mcp",
+      payload: {
+        jsonrpc: "2.0",
+        id: 10,
+        method: "tools/call",
+        params: {
+          name: "list_services",
+          arguments: { status: "running" },
+        },
+      },
+    });
+    expect(listServicesRes.statusCode).toBe(200);
+    const listServicesBody = listServicesRes.json();
+    expect(listServicesBody.result.isError).toBe(false);
+    expect(listServicesBody.result.data.services).toHaveLength(1);
+    expect(listServicesBody.result.data.services[0]).toMatchObject({
+      id: service.id,
+      name: "jellyfin",
+      status: "running",
+    });
+
+    // 2. get_service_status via MCP tools/call
+    const statusRes = await app.inject({
+      method: "POST",
+      url: "/api/mcp",
+      payload: {
+        jsonrpc: "2.0",
+        id: 11,
+        method: "tools/call",
+        params: {
+          name: "get_service_status",
+          arguments: { service_id: service.id },
+        },
+      },
+    });
+    expect(statusRes.statusCode).toBe(200);
+    expect(statusRes.json().result.data).toMatchObject({
+      id: service.id,
+      name: "jellyfin",
+      status: "running",
+      metrics: {
+        available: true,
+        cpuPercent: 18.4,
+      },
+    });
+
+    // 3. search_logs via MCP tools/call (verifying sensitive data redaction)
+    const logsRes = await app.inject({
+      method: "POST",
+      url: "/api/mcp",
+      payload: {
+        jsonrpc: "2.0",
+        id: 12,
+        method: "tools/call",
+        params: {
+          name: "search_logs",
+          arguments: { service_id: service.id, level: "error" },
+        },
+      },
+    });
+    expect(logsRes.statusCode).toBe(200);
+    expect(logsRes.json().result.data.entries).toHaveLength(1);
+    expect(logsRes.json().result.data.entries[0].message).toBe(
+      "Upstream failed with Bearer [REDACTED]"
+    );
+
+    // 4. list_incidents via MCP tools/call
+    const incidentsRes = await app.inject({
+      method: "POST",
+      url: "/api/mcp",
+      payload: {
+        jsonrpc: "2.0",
+        id: 13,
+        method: "tools/call",
+        params: {
+          name: "list_incidents",
+          arguments: { service_id: service.id, status: "open" },
+        },
+      },
+    });
+    expect(incidentsRes.statusCode).toBe(200);
+    expect(incidentsRes.json().result.data.incidents).toHaveLength(1);
+    expect(incidentsRes.json().result.data.incidents[0]).toMatchObject({
+      serviceId: service.id,
+      title: "Gateway timeout",
+      severity: "high",
+      status: "open",
+    });
+  });
+});

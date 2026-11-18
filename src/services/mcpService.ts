@@ -96,6 +96,73 @@ export class McpService {
       };
     }
 
+    if (request.method === "tools/call") {
+      const toolName = request.params?.name;
+      const args = (request.params?.arguments || {}) as Record<string, any>;
+
+      if (!toolName) {
+        return {
+          jsonrpc: "2.0",
+          id,
+          error: {
+            code: -32602,
+            message: "Missing tool name",
+          },
+        };
+      }
+
+      try {
+        let data: any;
+        if (
+          toolName === "list_services" ||
+          toolName === "get_service_status" ||
+          toolName === "search_logs"
+        ) {
+          data = await this.toolService.execute(toolName, args);
+        } else if (toolName === "list_incidents") {
+          const allowedStatuses = ["open", "investigating", "mitigated", "resolved"];
+          if (args.status && !allowedStatuses.includes(args.status)) {
+            throw new Error(
+              `Invalid incident status: ${args.status}. Must be one of: ${allowedStatuses.join(", ")}`
+            );
+          }
+          const incidents = this.incidentService.list({
+            serviceId: args.service_id,
+            status: args.status,
+          });
+          data = { incidents };
+        } else {
+          return {
+            jsonrpc: "2.0",
+            id,
+            error: {
+              code: -32601,
+              message: `Unknown tool: ${toolName}`,
+            },
+          };
+        }
+
+        return {
+          jsonrpc: "2.0",
+          id,
+          result: {
+            content: [{ type: "text", text: JSON.stringify(data) }],
+            data,
+            isError: false,
+          },
+        };
+      } catch (err: any) {
+        return {
+          jsonrpc: "2.0",
+          id,
+          error: {
+            code: -32602,
+            message: err?.message || "Tool execution failed",
+          },
+        };
+      }
+    }
+
     return {
       jsonrpc: "2.0",
       id,
