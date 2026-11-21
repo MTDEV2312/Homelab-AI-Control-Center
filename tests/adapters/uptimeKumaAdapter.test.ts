@@ -284,4 +284,13 @@ describe("UptimeKumaAdapter", () => {
       await app.close();
     }
   });
+
+  it("throws when baseUrl or slug is missing", () => {
+    expect(() => new UptimeKumaAdapter({ baseUrl: "   ", slug: "homelab" })).toThrow(
+      "UptimeKumaAdapter requires both baseUrl and slug"
+    );
+    expect(
+      () => new UptimeKumaAdapter({ baseUrl: "http://localhost:3001", slug: "   " })
+    ).toThrow("UptimeKumaAdapter requires both baseUrl and slug");
+  });
 });

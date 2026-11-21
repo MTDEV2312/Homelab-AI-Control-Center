@@ -45,6 +45,9 @@ export class UptimeKumaAdapter implements UptimeKumaClient {
   constructor(options: UptimeKumaAdapterOptions) {
     this.baseUrl = options.baseUrl.trim().replace(/\/+$/, "");
     this.slug = options.slug.trim();
+    if (!this.baseUrl || !this.slug) {
+      throw new Error("UptimeKumaAdapter requires both baseUrl and slug");
+    }
     this.timeoutMs = options.timeoutMs ?? 5000;
   }
 
