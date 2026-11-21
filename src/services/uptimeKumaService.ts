@@ -1,4 +1,5 @@
 import type { ServiceManager } from "./serviceManager.ts";
+import type { ControlCenterRepository } from "../interfaces/repository.ts";
 import type {
   UptimeKumaClient,
   UptimeKumaMonitor,
@@ -8,11 +9,23 @@ import type {
 export class UptimeKumaService {
   private client?: UptimeKumaClient;
   private serviceManager?: ServiceManager;
+  private repository?: ControlCenterRepository;
   private links: Map<string, string> = new Map();
 
-  constructor(options: { client?: UptimeKumaClient; serviceManager?: ServiceManager } = {}) {
+  constructor(
+    options: {
+      client?: UptimeKumaClient;
+      serviceManager?: ServiceManager;
+      repository?: ControlCenterRepository;
+    } = {}
+  ) {
     this.client = options.client;
     this.serviceManager = options.serviceManager;
+    this.repository = options.repository;
+  }
+
+  private getLinksMap(): Map<string, string> {
+    return this.repository ? this.repository.getMonitorLinks() : this.links;
   }
 
   hasClient(): boolean {
@@ -28,10 +41,11 @@ export class UptimeKumaService {
     }
 
     try {
+      const links = this.getLinksMap();
       const rawMonitors = await this.client.getMonitors();
       const monitors: UptimeKumaMonitor[] = rawMonitors.map((m) => ({
         ...m,
-        ...(this.links.has(m.id) ? { serviceId: this.links.get(m.id) } : {}),
+        ...(links.has(m.id) ? { serviceId: links.get(m.id) } : {}),
       }));
 
       return {
@@ -60,13 +74,17 @@ export class UptimeKumaService {
       return null;
     }
 
-    for (const [mId, sId] of this.links.entries()) {
-      if (sId === serviceId) {
-        this.links.delete(mId);
+    if (this.repository) {
+      this.repository.setMonitorLink(monitorId, serviceId);
+    } else {
+      for (const [mId, sId] of this.links.entries()) {
+        if (sId === serviceId) {
+          this.links.delete(mId);
+        }
       }
+      this.links.set(monitorId, serviceId);
     }
 
-    this.links.set(monitorId, serviceId);
     return {
       ...target,
       serviceId,

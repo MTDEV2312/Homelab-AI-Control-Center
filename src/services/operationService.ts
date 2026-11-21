@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import type { ServiceManager } from "./serviceManager.ts";
+import type { ControlCenterRepository } from "../interfaces/repository.ts";
 import type {
   PendingOperation,
   OperationAction,
@@ -11,9 +12,19 @@ export class OperationService {
   private serviceManager: ServiceManager;
   private pendingOperations: Map<string, PendingOperation> = new Map();
   private auditEntries: AuditEntry[] = [];
+  private repository?: ControlCenterRepository;
 
-  constructor(serviceManager: ServiceManager) {
+  constructor(serviceManager: ServiceManager, repository?: ControlCenterRepository) {
     this.serviceManager = serviceManager;
+    this.repository = repository;
+  }
+
+  private appendAudit(entry: AuditEntry): void {
+    if (this.repository) {
+      this.repository.addAuditEntry(entry);
+    } else {
+      this.auditEntries.push(entry);
+    }
   }
 
   async requestOperation(data: {
@@ -37,7 +48,7 @@ export class OperationService {
     const riskLevel: RiskLevel = data.action === "stop" ? "L3" : "L2";
 
     if (service.allowedActions && !service.allowedActions.includes(data.action)) {
-      const rejectedAudit: AuditEntry = {
+      this.appendAudit({
         id: crypto.randomUUID(),
         actor,
         action: data.action,
@@ -46,8 +57,7 @@ export class OperationService {
         outcome: "rejected",
         timestamp: new Date().toISOString(),
         details: `Action ${data.action} is not permitted by policy for service ${service.name}`,
-      };
-      this.auditEntries.push(rejectedAudit);
+      });
       return {
         error: `Action ${data.action} is not permitted by policy for service ${service.name}`,
         code: 403,
@@ -89,7 +99,7 @@ export class OperationService {
     }
 
     if (op.status !== "pending") {
-      const rejectedAudit: AuditEntry = {
+      this.appendAudit({
         id: crypto.randomUUID(),
         actor,
         action: op.action,
@@ -98,13 +108,12 @@ export class OperationService {
         outcome: "rejected",
         timestamp: new Date().toISOString(),
         details: `Operation is already ${op.status}`,
-      };
-      this.auditEntries.push(rejectedAudit);
+      });
       return { error: `Operation is already ${op.status}`, code: 400 };
     }
 
     if (op.confirmationToken !== token) {
-      const rejectedAudit: AuditEntry = {
+      this.appendAudit({
         id: crypto.randomUUID(),
         actor,
         action: op.action,
@@ -113,8 +122,7 @@ export class OperationService {
         outcome: "rejected",
         timestamp: new Date().toISOString(),
         details: "Invalid confirmation token",
-      };
-      this.auditEntries.push(rejectedAudit);
+      });
       return { error: "Invalid confirmation token", code: 403 };
     }
 
@@ -130,7 +138,7 @@ export class OperationService {
       outcome: "success",
       timestamp: new Date().toISOString(),
     };
-    this.auditEntries.push(auditEntry);
+    this.appendAudit(auditEntry);
 
     return {
       status: "executed",
@@ -150,6 +158,9 @@ export class OperationService {
   }
 
   getAuditLog(options?: { serviceId?: string }): AuditEntry[] {
+    if (this.repository) {
+      return this.repository.listAuditEntries(options);
+    }
     if (options?.serviceId) {
       return this.auditEntries.filter((e) => e.serviceId === options.serviceId);
     }
@@ -169,7 +180,7 @@ export class OperationService {
       timestamp: new Date().toISOString(),
       ...data,
     };
-    this.auditEntries.push(entry);
+    this.appendAudit(entry);
     return entry;
   }
 }

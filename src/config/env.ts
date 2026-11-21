@@ -1,4 +1,5 @@
 import { DockerEngineAdapter } from "../adapters/dockerEngineAdapter.ts";
+import { SqliteRepository } from "../adapters/sqliteRepository.ts";
 import type { AppOptions } from "../app.ts";
 
 function isConfiguredValue(val?: string): val is string {
@@ -11,6 +12,13 @@ function isConfiguredValue(val?: string): val is string {
 
 export function createAdaptersFromEnv(env: NodeJS.ProcessEnv = process.env): AppOptions {
   const options: AppOptions = {};
+
+  const sqliteDbPath = isConfiguredValue(env.SQLITE_DB_PATH)
+    ? env.SQLITE_DB_PATH.trim()
+    : undefined;
+  if (sqliteDbPath) {
+    options.repository = new SqliteRepository(sqliteDbPath);
+  }
 
   const dockerHost = isConfiguredValue(env.DOCKER_HOST) ? env.DOCKER_HOST.trim() : undefined;
   const dockerSocket = isConfiguredValue(env.DOCKER_SOCKET_PATH)

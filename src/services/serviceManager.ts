@@ -14,6 +14,7 @@ import type { OperationAction } from "../interfaces/operation.ts";
 import type { UptimeKumaMonitor } from "../interfaces/uptimeKuma.ts";
 import type { UptimeKumaService } from "./uptimeKumaService.ts";
 import type { N8nService } from "./n8nService.ts";
+import type { ControlCenterRepository } from "../interfaces/repository.ts";
 
 export interface ServicesListResult {
   summary: {
@@ -56,12 +57,43 @@ export class ServiceManager {
   private healthChecks: Map<string, HealthCheckResult[]> = new Map();
   private uptimeKumaService?: UptimeKumaService;
   private n8nService?: N8nService;
+  private repository?: ControlCenterRepository;
 
-  constructor(options: { dockerClient?: DockerClient; initialServices?: Service[] } = {}) {
+  constructor(
+    options: {
+      dockerClient?: DockerClient;
+      initialServices?: Service[];
+      repository?: ControlCenterRepository;
+    } = {}
+  ) {
     this.dockerClient = options.dockerClient;
+    this.repository = options.repository;
     if (options.initialServices) {
-      this.services = [...options.initialServices];
+      if (this.repository) {
+        for (const srv of options.initialServices) {
+          if (!this.repository.getServiceById(srv.id)) {
+            this.repository.saveService(srv);
+          }
+        }
+      } else {
+        this.services = [...options.initialServices];
+      }
     }
+  }
+
+  private getServiceRecord(id: string): Service | undefined {
+    if (this.repository) {
+      return this.repository.getServiceById(id) ?? undefined;
+    }
+    return this.services.find((s) => s.id === id);
+  }
+
+  private getHealthChecksForService(serviceId: string, limit?: number): HealthCheckResult[] {
+    if (this.repository) {
+      return this.repository.getHealthChecks(serviceId, limit);
+    }
+    const list = this.healthChecks.get(serviceId) || [];
+    return limit !== undefined ? list.slice(-limit) : list;
   }
 
   setUptimeKumaService(uptimeKumaService: UptimeKumaService): void {
@@ -86,7 +118,11 @@ export class ServiceManager {
       allowedActions: data.allowedActions,
       createdAt: new Date().toISOString(),
     };
-    this.services.push(newService);
+    if (this.repository) {
+      this.repository.saveService(newService);
+    } else {
+      this.services.push(newService);
+    }
     return newService;
   }
 
@@ -107,8 +143,10 @@ export class ServiceManager {
       n8nStatus = n8nResult.integrationStatus;
     }
 
+    const allServices = this.repository ? this.repository.listServices() : this.services;
+
     const enrichedServices = await Promise.all(
-      this.services.map(async (service) => {
+      allServices.map(async (service) => {
         let status: ServiceStatus = "unknown";
         if (this.dockerClient && service.integration === "docker") {
           try {
@@ -119,7 +157,7 @@ export class ServiceManager {
           }
         }
 
-        const checks = this.healthChecks.get(service.id) || [];
+        const checks = this.getHealthChecksForService(service.id);
         let consecutiveFailures = 0;
         for (let i = checks.length - 1; i >= 0; i--) {
           if (checks[i].status === "unhealthy") {
@@ -149,7 +187,7 @@ export class ServiceManager {
 
     return {
       summary: {
-        total: this.services.length,
+        total: allServices.length,
         online,
         unhealthy,
       },
@@ -163,7 +201,7 @@ export class ServiceManager {
   }
 
   async getById(id: string): Promise<ServiceDetailResult | null> {
-    const service = this.services.find((s) => s.id === id);
+    const service = this.getServiceRecord(id);
     if (!service) return null;
 
     let status: ServiceStatus = "unknown";
@@ -204,13 +242,13 @@ export class ServiceManager {
       ...service,
       status,
       metrics,
-      healthCheck: this.healthChecks.get(service.id)?.slice(-1)[0],
+      healthCheck: this.getHealthChecksForService(service.id, 1)[0],
       uptimeKumaMonitor,
     };
   }
 
   async runHealthCheck(id: string): Promise<HealthCheckResult | null> {
-    const service = this.services.find((s) => s.id === id);
+    const service = this.getServiceRecord(id);
     if (!service) return null;
 
     let status: HealthStatus = "healthy";
@@ -238,26 +276,29 @@ export class ServiceManager {
       errorCode,
     };
 
-    const history = this.healthChecks.get(service.id) || [];
-    history.push(check);
-    this.healthChecks.set(service.id, history);
+    if (this.repository) {
+      this.repository.addHealthCheck(check);
+    } else {
+      const history = this.healthChecks.get(service.id) || [];
+      history.push(check);
+      this.healthChecks.set(service.id, history);
+    }
 
     return check;
   }
 
   async getHealthCheckHistory(id: string, limit: number = 20): Promise<{ serviceId: string; history: HealthCheckResult[] } | null> {
-    const service = this.services.find((s) => s.id === id);
+    const service = this.getServiceRecord(id);
     if (!service) return null;
 
-    const history = (this.healthChecks.get(service.id) || []).slice(-limit);
     return {
       serviceId: service.id,
-      history,
+      history: this.getHealthChecksForService(service.id, limit),
     };
   }
 
   async getLogs(id: string, options?: LogFilterOptions): Promise<{ serviceId: string; entries: LogEntry[] } | null> {
-    const service = this.services.find((s) => s.id === id);
+    const service = this.getServiceRecord(id);
     if (!service) return null;
 
     let entries: LogEntry[] = [];
@@ -301,7 +342,7 @@ export class ServiceManager {
   }
 
   async executeServiceAction(id: string, action: string): Promise<boolean> {
-    const service = this.services.find((s) => s.id === id);
+    const service = this.getServiceRecord(id);
     if (!service) return false;
 
     if (this.dockerClient?.executeContainerAction && service.integration === "docker") {

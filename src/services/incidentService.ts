@@ -1,13 +1,16 @@
 import crypto from "node:crypto";
 import type { ServiceManager } from "./serviceManager.ts";
 import type { Incident, CreateIncidentInput, UpdateIncidentInput, IncidentStatus } from "../interfaces/incident.ts";
+import type { ControlCenterRepository } from "../interfaces/repository.ts";
 
 export class IncidentService {
   private serviceManager: ServiceManager;
   private incidents: Incident[] = [];
+  private repository?: ControlCenterRepository;
 
-  constructor(serviceManager: ServiceManager) {
+  constructor(serviceManager: ServiceManager, repository?: ControlCenterRepository) {
     this.serviceManager = serviceManager;
+    this.repository = repository;
   }
 
   async create(input: CreateIncidentInput): Promise<Incident | null> {
@@ -29,11 +32,19 @@ export class IncidentService {
       actions: input.actions ?? [],
     };
 
-    this.incidents.push(incident);
+    if (this.repository) {
+      this.repository.saveIncident(incident);
+    } else {
+      this.incidents.push(incident);
+    }
     return incident;
   }
 
   list(options?: { serviceId?: string; status?: IncidentStatus }): Incident[] {
+    if (this.repository) {
+      return this.repository.listIncidents(options);
+    }
+
     let result = [...this.incidents];
     if (options?.serviceId) {
       result = result.filter((inc) => inc.serviceId === options.serviceId);
@@ -45,7 +56,9 @@ export class IncidentService {
   }
 
   update(id: string, input: UpdateIncidentInput): Incident | null {
-    const incident = this.incidents.find((inc) => inc.id === id);
+    const incident = this.repository
+      ? this.repository.getIncidentById(id)
+      : (this.incidents.find((inc) => inc.id === id) ?? null);
     if (!incident) {
       return null;
     }
@@ -83,6 +96,10 @@ export class IncidentService {
 
     if (input.resolutionNotes !== undefined) {
       incident.resolutionNotes = input.resolutionNotes;
+    }
+
+    if (this.repository) {
+      this.repository.updateIncident(incident);
     }
 
     return incident;

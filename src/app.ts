@@ -18,6 +18,7 @@ import { McpService } from "./services/mcpService.ts";
 import type { LlmProvider } from "./interfaces/assistant.ts";
 import type { UptimeKumaClient } from "./interfaces/uptimeKuma.ts";
 import type { N8nClient } from "./interfaces/n8n.ts";
+import type { ControlCenterRepository } from "./interfaces/repository.ts";
 import type {
   DockerClient,
   Service,
@@ -35,10 +36,12 @@ export type {
   LlmProvider,
   UptimeKumaClient,
   N8nClient,
+  ControlCenterRepository,
 };
 
 export interface AppOptions {
   dockerClient?: DockerClient;
+  repository?: ControlCenterRepository;
   serviceManager?: ServiceManager;
   toolService?: ToolService;
   assistantService?: AssistantService;
@@ -56,16 +59,23 @@ export function buildApp(options: AppOptions = {}) {
   const app = Fastify();
   const serviceManager =
     options.serviceManager ??
-    new ServiceManager({ dockerClient: options.dockerClient });
+    new ServiceManager({
+      dockerClient: options.dockerClient,
+      repository: options.repository,
+    });
   const toolService =
     options.toolService ?? new ToolService(serviceManager);
   const operationService =
-    options.operationService ?? new OperationService(serviceManager);
+    options.operationService ?? new OperationService(serviceManager, options.repository);
   const incidentService =
-    options.incidentService ?? new IncidentService(serviceManager);
+    options.incidentService ?? new IncidentService(serviceManager, options.repository);
   const uptimeKumaService =
     options.uptimeKumaService ??
-    new UptimeKumaService({ client: options.uptimeKumaClient, serviceManager });
+    new UptimeKumaService({
+      client: options.uptimeKumaClient,
+      serviceManager,
+      repository: options.repository,
+    });
   serviceManager.setUptimeKumaService(uptimeKumaService);
   const n8nService =
     options.n8nService ?? new N8nService({ client: options.n8nClient });
