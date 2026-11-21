@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import { describe, it, expect, afterEach } from "vitest";
 import { buildApp } from "../../src/app.ts";
 import { UptimeKumaAdapter } from "../../src/adapters/uptimeKumaAdapter.ts";
+import { createAdaptersFromEnv } from "../../src/config/env.ts";
 
 describe("UptimeKumaAdapter", () => {
   let activeServer: http.Server | null = null;
@@ -292,5 +293,85 @@ describe("UptimeKumaAdapter", () => {
     expect(
       () => new UptimeKumaAdapter({ baseUrl: "http://localhost:3001", slug: "   " })
     ).toThrow("UptimeKumaAdapter requires both baseUrl and slug");
+  });
+
+  it("createAdaptersFromEnv wires uptimeKumaClient and ignores placeholder values", async () => {
+    const placeholderAdapters = createAdaptersFromEnv({
+      UPTIME_KUMA_URL: "your_uptime_kuma_url_here",
+      UPTIME_KUMA_SLUG: "your_uptime_kuma_status_page_slug_here",
+    });
+    expect(placeholderAdapters.uptimeKumaClient).toBeUndefined();
+
+    const partialAdapters = createAdaptersFromEnv({
+      UPTIME_KUMA_URL: "http://localhost:3001",
+    });
+    expect(partialAdapters.uptimeKumaClient).toBeUndefined();
+
+    const baseUrl = await startMockKumaServer((req, res) => {
+      if (req.url === "/api/status-page/homelab") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            publicGroupList: [
+              { id: 1, name: "Infra", monitorList: [{ id: 7, name: "DNS" }] },
+            ],
+          })
+        );
+        return;
+      }
+
+      if (req.url === "/api/status-page/heartbeat/homelab") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            heartbeatList: {
+              "7": [{ status: 1, time: "2026-11-20 20:00:00.000", ping: 11 }],
+            },
+            uptimeList: { "7_24": 1 },
+          })
+        );
+        return;
+      }
+
+      res.writeHead(404).end();
+    });
+
+    const adapters = createAdaptersFromEnv({
+      UPTIME_KUMA_URL: baseUrl,
+      UPTIME_KUMA_SLUG: "homelab",
+      UPTIME_KUMA_TIMEOUT_MS: "2500",
+    });
+    expect(adapters.uptimeKumaClient).toBeDefined();
+
+    const app = buildApp(adapters);
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/uptime-kuma/monitors",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        integrationStatus: "available",
+        monitors: [
+          {
+            id: "7",
+            name: "DNS",
+            status: "up",
+            uptimePercent: 100,
+            latencyMs: 11,
+            heartbeats: [
+              {
+                status: "up",
+                timestamp: "2026-11-20 20:00:00.000",
+                latencyMs: 11,
+              },
+            ],
+          },
+        ],
+      });
+    } finally {
+      await app.close();
+    }
   });
 });
