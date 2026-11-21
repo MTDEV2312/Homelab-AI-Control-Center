@@ -104,4 +104,119 @@ describe("UptimeKumaAdapter", () => {
       await app.close();
     }
   });
+
+  it("maps all Uptime Kuma status codes (1=up, 0=down, 2=pending, 3=maintenance) and handles empty heartbeats", async () => {
+    const baseUrl = await startMockKumaServer((req, res) => {
+      if (req.url === "/api/status-page/homelab") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            publicGroupList: [
+              {
+                id: 1,
+                name: "Services",
+                monitorList: [
+                  { id: 1, name: "Up Svc" },
+                  { id: 2, name: "Down Svc" },
+                  { id: 3, name: "Pending Svc" },
+                  { id: 4, name: "Maint Svc" },
+                  { id: 5, name: "No Beat Svc" },
+                ],
+              },
+            ],
+          })
+        );
+        return;
+      }
+
+      if (req.url === "/api/status-page/heartbeat/homelab") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            heartbeatList: {
+              "1": [{ status: 1, time: "2026-11-20 20:00:00.000", ping: 12 }],
+              "2": [
+                {
+                  status: 0,
+                  time: "2026-11-20 20:00:00.000",
+                  msg: "Connection refused",
+                  ping: 0,
+                },
+              ],
+              "3": [{ status: 2, time: "2026-11-20 20:00:00.000", ping: null }],
+              "4": [{ status: 3, time: "2026-11-20 20:00:00.000", ping: 5 }],
+            },
+            uptimeList: {
+              "1_24": 1,
+              "2_24": 0.5,
+              "3_24": 0,
+              "4_24": 0.9825,
+            },
+          })
+        );
+        return;
+      }
+
+      res.writeHead(404).end();
+    });
+
+    const adapter = new UptimeKumaAdapter({ baseUrl, slug: "homelab" });
+    const monitors = await adapter.getMonitors();
+
+    expect(monitors).toEqual([
+      {
+        id: "1",
+        name: "Up Svc",
+        status: "up",
+        uptimePercent: 100,
+        latencyMs: 12,
+        heartbeats: [
+          { status: "up", timestamp: "2026-11-20 20:00:00.000", latencyMs: 12 },
+        ],
+      },
+      {
+        id: "2",
+        name: "Down Svc",
+        status: "down",
+        uptimePercent: 50,
+        latencyMs: 0,
+        heartbeats: [
+          {
+            status: "down",
+            timestamp: "2026-11-20 20:00:00.000",
+            latencyMs: 0,
+            message: "Connection refused",
+          },
+        ],
+      },
+      {
+        id: "3",
+        name: "Pending Svc",
+        status: "pending",
+        uptimePercent: 0,
+        latencyMs: 0,
+        heartbeats: [
+          { status: "pending", timestamp: "2026-11-20 20:00:00.000", latencyMs: 0 },
+        ],
+      },
+      {
+        id: "4",
+        name: "Maint Svc",
+        status: "maintenance",
+        uptimePercent: 98.25,
+        latencyMs: 5,
+        heartbeats: [
+          { status: "maintenance", timestamp: "2026-11-20 20:00:00.000", latencyMs: 5 },
+        ],
+      },
+      {
+        id: "5",
+        name: "No Beat Svc",
+        status: "pending",
+        uptimePercent: 0,
+        latencyMs: 0,
+        heartbeats: [],
+      },
+    ]);
+  });
 });

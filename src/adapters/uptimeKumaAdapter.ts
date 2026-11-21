@@ -1,4 +1,5 @@
 import type {
+  MonitorStatus,
   UptimeKumaClient,
   UptimeKumaHeartbeat,
   UptimeKumaMonitor,
@@ -17,8 +18,22 @@ interface StatusPageResponse {
 }
 
 interface HeartbeatResponse {
-  heartbeatList?: Record<string, Array<{ time: string; msg?: string; ping?: number }>>;
+  heartbeatList?: Record<
+    string,
+    Array<{ status?: number; time: string; msg?: string; ping?: number | null }>
+  >;
   uptimeList?: Record<string, number>;
+}
+
+const STATUS_MAP: Record<number, MonitorStatus> = {
+  0: "down",
+  1: "up",
+  2: "pending",
+  3: "maintenance",
+};
+
+function mapMonitorStatus(code?: number): MonitorStatus {
+  return (code !== undefined ? STATUS_MAP[code] : undefined) ?? "pending";
 }
 
 /** HTTP adapter reading monitor status and heartbeats from Uptime Kuma's status page API. */
@@ -50,7 +65,7 @@ export class UptimeKumaAdapter implements UptimeKumaClient {
       const heartbeats: UptimeKumaHeartbeat[] = (
         heartbeatData.heartbeatList?.[id] ?? []
       ).map((hb) => ({
-        status: "up",
+        status: mapMonitorStatus(hb.status),
         timestamp: hb.time,
         latencyMs: hb.ping ?? 0,
         ...(hb.msg ? { message: hb.msg } : {}),
@@ -62,7 +77,7 @@ export class UptimeKumaAdapter implements UptimeKumaClient {
         id,
         name: monitor.name,
         ...(monitor.url ? { url: monitor.url } : {}),
-        status: latest?.status ?? "up",
+        status: latest?.status ?? "pending",
         uptimePercent: Math.round(uptimeRatio * 10000) / 100,
         latencyMs: latest?.latencyMs ?? 0,
         heartbeats,
