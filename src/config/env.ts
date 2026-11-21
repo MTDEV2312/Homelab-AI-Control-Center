@@ -1,4 +1,5 @@
 import { DockerEngineAdapter } from "../adapters/dockerEngineAdapter.ts";
+import { N8nAdapter } from "../adapters/n8nAdapter.ts";
 import { SqliteRepository } from "../adapters/sqliteRepository.ts";
 import { UptimeKumaAdapter } from "../adapters/uptimeKumaAdapter.ts";
 import type { AppOptions } from "../app.ts";
@@ -51,6 +52,19 @@ export function createAdaptersFromEnv(env: NodeJS.ProcessEnv = process.env): App
       baseUrl: uptimeKumaUrl,
       slug: uptimeKumaSlug,
       timeoutMs: parseTimeoutMs(env.UPTIME_KUMA_TIMEOUT_MS),
+    });
+  }
+
+  const n8nUrl = isConfiguredValue(env.N8N_URL) ? env.N8N_URL.trim() : undefined;
+  const n8nApiKey = isConfiguredValue(env.N8N_API_KEY)
+    ? env.N8N_API_KEY.trim()
+    : undefined;
+
+  if (n8nUrl && n8nApiKey) {
+    options.n8nClient = new N8nAdapter({
+      baseUrl: n8nUrl,
+      apiKey: n8nApiKey,
+      timeoutMs: parseTimeoutMs(env.N8N_TIMEOUT_MS),
     });
   }
 
