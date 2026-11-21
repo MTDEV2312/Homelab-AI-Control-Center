@@ -245,4 +245,43 @@ describe("UptimeKumaAdapter", () => {
       await app.close();
     }
   });
+
+  it("aborts and degrades to unavailable on request timeout", async () => {
+    const baseUrl = await startMockKumaServer((req, res) => {
+      const timer = setTimeout(() => {
+        if (res.writableEnded) return;
+        res.writeHead(200, { "Content-Type": "application/json" });
+        if (req.url?.includes("/heartbeat/")) {
+          res.end(JSON.stringify({ heartbeatList: {}, uptimeList: {} }));
+        } else {
+          res.end(JSON.stringify({ publicGroupList: [] }));
+        }
+      }, 400);
+
+      req.on("close", () => clearTimeout(timer));
+    });
+
+    const app = buildApp({
+      uptimeKumaClient: new UptimeKumaAdapter({
+        baseUrl,
+        slug: "homelab",
+        timeoutMs: 50,
+      }),
+    });
+
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/uptime-kuma/monitors",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        integrationStatus: "unavailable",
+        monitors: [],
+      });
+    } finally {
+      await app.close();
+    }
+  });
 });

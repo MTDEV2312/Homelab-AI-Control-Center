@@ -40,17 +40,20 @@ function mapMonitorStatus(code?: number): MonitorStatus {
 export class UptimeKumaAdapter implements UptimeKumaClient {
   private baseUrl: string;
   private slug: string;
+  private timeoutMs: number;
 
   constructor(options: UptimeKumaAdapterOptions) {
     this.baseUrl = options.baseUrl.trim().replace(/\/+$/, "");
     this.slug = options.slug.trim();
+    this.timeoutMs = options.timeoutMs ?? 5000;
   }
 
   async getMonitors(): Promise<Omit<UptimeKumaMonitor, "serviceId">[]> {
     const encodedSlug = encodeURIComponent(this.slug);
+    const signal = AbortSignal.timeout(this.timeoutMs);
     const [statusRes, heartbeatRes] = await Promise.all([
-      fetch(`${this.baseUrl}/api/status-page/${encodedSlug}`),
-      fetch(`${this.baseUrl}/api/status-page/heartbeat/${encodedSlug}`),
+      fetch(`${this.baseUrl}/api/status-page/${encodedSlug}`, { signal }),
+      fetch(`${this.baseUrl}/api/status-page/heartbeat/${encodedSlug}`, { signal }),
     ]);
 
     if (!statusRes.ok) {
