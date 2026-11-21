@@ -20,6 +20,6 @@ app.listen({ port, host: "0.0.0.0" }, (err, address) => {
     process.exit(1);
   }
   console.log(
-    `API Server listening on ${address} (storage: ${adapters.repository ? "sqlite" : "in-memory"}, docker: ${adapters.dockerClient ? "configured" : "unconfigured"}, uptimeKuma: ${adapters.uptimeKumaClient ? "configured" : "unconfigured"})`
+    `API Server listening on ${address} (storage: ${adapters.repository ? "sqlite" : "in-memory"}, docker: ${adapters.dockerClient ? "configured" : "unconfigured"}, uptimeKuma: ${adapters.uptimeKumaClient ? "configured" : "unconfigured"}, n8n: ${adapters.n8nClient ? "configured" : "unconfigured"})`
   );
 });
