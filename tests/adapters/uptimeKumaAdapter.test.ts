@@ -219,4 +219,30 @@ describe("UptimeKumaAdapter", () => {
       },
     ]);
   });
+
+  it("degrades to unavailable when Uptime Kuma returns HTTP error", async () => {
+    const baseUrl = await startMockKumaServer((_req, res) => {
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: false, msg: "Service unavailable" }));
+    });
+
+    const app = buildApp({
+      uptimeKumaClient: new UptimeKumaAdapter({ baseUrl, slug: "homelab" }),
+    });
+
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/uptime-kuma/monitors",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        integrationStatus: "unavailable",
+        monitors: [],
+      });
+    } finally {
+      await app.close();
+    }
+  });
 });

@@ -53,6 +53,13 @@ export class UptimeKumaAdapter implements UptimeKumaClient {
       fetch(`${this.baseUrl}/api/status-page/heartbeat/${encodedSlug}`),
     ]);
 
+    if (!statusRes.ok) {
+      throw new Error(`Uptime Kuma status page request failed with status ${statusRes.status}`);
+    }
+    if (!heartbeatRes.ok) {
+      throw new Error(`Uptime Kuma heartbeat request failed with status ${heartbeatRes.status}`);
+    }
+
     const statusData = (await statusRes.json()) as StatusPageResponse;
     const heartbeatData = (await heartbeatRes.json()) as HeartbeatResponse;
 
