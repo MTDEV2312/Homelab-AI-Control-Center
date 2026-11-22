@@ -55,6 +55,12 @@ describe("N8nAdapter", () => {
         return;
       }
 
+      if (req.url?.startsWith("/api/v1/executions")) {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ data: [] }));
+        return;
+      }
+
       res.writeHead(404).end();
     });
 
@@ -141,6 +147,12 @@ describe("N8nAdapter", () => {
         return;
       }
 
+      if (req.url?.startsWith("/api/v1/executions")) {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ data: [] }));
+        return;
+      }
+
       res.writeHead(404).end();
     });
 
@@ -168,6 +180,100 @@ describe("N8nAdapter", () => {
             name: "Daily Report",
             active: true,
             updatedAt: "2026-11-20T19:00:00.000Z",
+          },
+        ],
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("fetches failed executions with redacted error details and treats crashed runs as errors", async () => {
+    let receivedApiKey: string | string[] | undefined;
+    let receivedIncludeData: string | null = null;
+
+    const baseUrl = await startMockN8nServer((req, res) => {
+      const url = new URL(req.url ?? "/", "http://localhost");
+      if (url.pathname === "/api/v1/executions") {
+        receivedApiKey = req.headers["x-n8n-api-key"];
+        receivedIncludeData = url.searchParams.get("includeData");
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            data: [
+              {
+                id: "101",
+                workflowId: "wf-1",
+                status: "success",
+                startedAt: "2026-11-22T10:00:00.000Z",
+                stoppedAt: "2026-11-22T10:00:05.000Z",
+                workflowData: { name: "Nightly Backup" },
+              },
+              {
+                id: "102",
+                workflowId: "wf-2",
+                status: "error",
+                startedAt: "2026-11-22T12:00:00.000Z",
+                stoppedAt: "2026-11-22T12:00:03.000Z",
+                workflowData: { name: "Alert Webhook Relay" },
+                data: {
+                  resultData: {
+                    error: { message: "Webhook rejected: Bearer sample_bearer_value" },
+                  },
+                },
+              },
+              {
+                id: "103",
+                workflowId: "wf-3",
+                status: "crashed",
+                startedAt: "2026-11-22T13:00:00.000Z",
+                data: {
+                  resultData: {
+                    error: { message: "Upstream failed with token=sample_token_value" },
+                  },
+                },
+              },
+            ],
+          })
+        );
+        return;
+      }
+
+      res.writeHead(404).end();
+    });
+
+    const app = buildApp({
+      n8nClient: new N8nAdapter({ baseUrl, apiKey: "test-n8n-key" }),
+    });
+
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/n8n/executions/failed",
+      });
+
+      expect(receivedApiKey).toBe("test-n8n-key");
+      expect(receivedIncludeData).toBe("true");
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        integrationStatus: "available",
+        executions: [
+          {
+            id: "102",
+            workflowId: "wf-2",
+            workflowName: "Alert Webhook Relay",
+            status: "error",
+            startedAt: "2026-11-22T12:00:00.000Z",
+            stoppedAt: "2026-11-22T12:00:03.000Z",
+            errorMessage: "Webhook rejected: Bearer [REDACTED]",
+          },
+          {
+            id: "103",
+            workflowId: "wf-3",
+            workflowName: "wf-3",
+            status: "error",
+            startedAt: "2026-11-22T13:00:00.000Z",
+            errorMessage: "Upstream failed with token=[REDACTED]",
           },
         ],
       });
