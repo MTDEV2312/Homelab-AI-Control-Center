@@ -49,11 +49,15 @@ export class N8nAdapter implements N8nClient {
     this.apiKey = options.apiKey.trim();
   }
 
-  async getWorkflows(): Promise<N8nWorkflow[]> {
-    const response = await fetch(`${this.baseUrl}/api/v1/workflows`, {
+  private async fetchJson<T>(path: string): Promise<T> {
+    const response = await fetch(`${this.baseUrl}${path}`, {
       headers: { "X-N8N-API-KEY": this.apiKey },
     });
-    const body = (await response.json()) as { data?: RawN8nWorkflow[] };
+    return (await response.json()) as T;
+  }
+
+  async getWorkflows(): Promise<N8nWorkflow[]> {
+    const body = await this.fetchJson<{ data?: RawN8nWorkflow[] }>("/api/v1/workflows");
 
     return (body.data ?? []).map((wf) => ({
       id: String(wf.id),
@@ -69,10 +73,9 @@ export class N8nAdapter implements N8nClient {
       params.set("workflowId", options.workflowId);
     }
 
-    const response = await fetch(`${this.baseUrl}/api/v1/executions?${params.toString()}`, {
-      headers: { "X-N8N-API-KEY": this.apiKey },
-    });
-    const body = (await response.json()) as { data?: RawN8nExecution[] };
+    const body = await this.fetchJson<{ data?: RawN8nExecution[] }>(
+      `/api/v1/executions?${params.toString()}`
+    );
 
     return (body.data ?? []).map((ex) => {
       const errorMessage = ex.data?.resultData?.error?.message ?? ex.error?.message;
