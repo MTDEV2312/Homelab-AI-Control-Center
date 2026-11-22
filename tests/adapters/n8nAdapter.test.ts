@@ -355,4 +355,76 @@ describe("N8nAdapter", () => {
       await app.close();
     }
   });
+
+  it("reports live failedExecutions count in workflows summary", async () => {
+    const baseUrl = await startMockN8nServer((req, res) => {
+      const url = new URL(req.url ?? "/", "http://localhost");
+      if (url.pathname === "/api/v1/workflows") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            data: [
+              { id: "wf-1", name: "Backup", active: true },
+              { id: "wf-2", name: "Relay", active: false },
+            ],
+          })
+        );
+        return;
+      }
+
+      if (url.pathname === "/api/v1/executions") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            data: [
+              {
+                id: "301",
+                workflowId: "wf-1",
+                status: "success",
+                startedAt: "2026-11-22T10:00:00.000Z",
+              },
+              {
+                id: "302",
+                workflowId: "wf-1",
+                status: "error",
+                startedAt: "2026-11-22T11:00:00.000Z",
+              },
+              {
+                id: "303",
+                workflowId: "wf-2",
+                status: "crashed",
+                startedAt: "2026-11-22T12:00:00.000Z",
+              },
+            ],
+          })
+        );
+        return;
+      }
+
+      res.writeHead(404).end();
+    });
+
+    const app = buildApp({
+      n8nClient: new N8nAdapter({ baseUrl, apiKey: "test-n8n-key" }),
+    });
+
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/n8n/workflows",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        integrationStatus: "available",
+        summary: { total: 2, active: 1, failedExecutions: 2 },
+        workflows: [
+          { id: "wf-1", name: "Backup", active: true },
+          { id: "wf-2", name: "Relay", active: false },
+        ],
+      });
+    } finally {
+      await app.close();
+    }
+  });
 });
