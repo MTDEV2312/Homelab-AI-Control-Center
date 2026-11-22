@@ -2,6 +2,7 @@ import type {
   N8nClient,
   N8nExecution,
   N8nExecutionStatus,
+  N8nFailedExecutionFilter,
   N8nWorkflow,
 } from "../interfaces/n8n.ts";
 
@@ -62,8 +63,13 @@ export class N8nAdapter implements N8nClient {
     }));
   }
 
-  async getExecutions(): Promise<N8nExecution[]> {
-    const response = await fetch(`${this.baseUrl}/api/v1/executions?includeData=true`, {
+  async getExecutions(options?: N8nFailedExecutionFilter): Promise<N8nExecution[]> {
+    const params = new URLSearchParams({ includeData: "true" });
+    if (options?.workflowId) {
+      params.set("workflowId", options.workflowId);
+    }
+
+    const response = await fetch(`${this.baseUrl}/api/v1/executions?${params.toString()}`, {
       headers: { "X-N8N-API-KEY": this.apiKey },
     });
     const body = (await response.json()) as { data?: RawN8nExecution[] };

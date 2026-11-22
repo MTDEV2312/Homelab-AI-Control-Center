@@ -281,4 +281,78 @@ describe("N8nAdapter", () => {
       await app.close();
     }
   });
+
+  it("filters failed executions by workflowId (forwarded upstream) and since timestamp", async () => {
+    const receivedWorkflowIds: Array<string | null> = [];
+
+    const baseUrl = await startMockN8nServer((req, res) => {
+      const url = new URL(req.url ?? "/", "http://localhost");
+      if (url.pathname === "/api/v1/executions") {
+        receivedWorkflowIds.push(url.searchParams.get("workflowId"));
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            data: [
+              {
+                id: "201",
+                workflowId: "wf-1",
+                status: "error",
+                startedAt: "2026-11-22T09:00:00.000Z",
+                workflowData: { name: "Backup" },
+                data: { resultData: { error: { message: "Disk full" } } },
+              },
+              {
+                id: "202",
+                workflowId: "wf-2",
+                status: "error",
+                startedAt: "2026-11-22T11:00:00.000Z",
+                workflowData: { name: "Alert Relay" },
+                data: { resultData: { error: { message: "Timeout" } } },
+              },
+              {
+                id: "203",
+                workflowId: "wf-2",
+                status: "error",
+                startedAt: "2026-11-22T15:00:00.000Z",
+                workflowData: { name: "Alert Relay" },
+                data: { resultData: { error: { message: "DNS error" } } },
+              },
+            ],
+          })
+        );
+        return;
+      }
+
+      res.writeHead(404).end();
+    });
+
+    const app = buildApp({
+      n8nClient: new N8nAdapter({ baseUrl, apiKey: "test-n8n-key" }),
+    });
+
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/n8n/executions/failed?workflowId=wf-2&since=2026-11-22T12:00:00.000Z",
+      });
+
+      expect(receivedWorkflowIds).toEqual(["wf-2"]);
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        integrationStatus: "available",
+        executions: [
+          {
+            id: "203",
+            workflowId: "wf-2",
+            workflowName: "Alert Relay",
+            status: "error",
+            startedAt: "2026-11-22T15:00:00.000Z",
+            errorMessage: "DNS error",
+          },
+        ],
+      });
+    } finally {
+      await app.close();
+    }
+  });
 });
