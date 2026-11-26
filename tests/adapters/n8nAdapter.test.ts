@@ -542,4 +542,13 @@ describe("N8nAdapter", () => {
       await app.close();
     }
   });
+
+  it("throws when baseUrl or apiKey is missing", () => {
+    expect(() => new N8nAdapter({ baseUrl: "   ", apiKey: "test-n8n-key" })).toThrow(
+      "N8nAdapter requires both baseUrl and apiKey"
+    );
+    expect(
+      () => new N8nAdapter({ baseUrl: "http://localhost:5678", apiKey: "   " })
+    ).toThrow("N8nAdapter requires both baseUrl and apiKey");
+  });
 });

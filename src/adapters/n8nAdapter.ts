@@ -48,6 +48,9 @@ export class N8nAdapter implements N8nClient {
   constructor(options: N8nAdapterOptions) {
     this.baseUrl = options.baseUrl.trim().replace(/\/+$/, "");
     this.apiKey = options.apiKey.trim();
+    if (!this.baseUrl || !this.apiKey) {
+      throw new Error("N8nAdapter requires both baseUrl and apiKey");
+    }
     this.timeoutMs = options.timeoutMs ?? 5000;
   }
 
