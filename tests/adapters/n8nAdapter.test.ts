@@ -475,4 +475,71 @@ describe("N8nAdapter", () => {
       await app.close();
     }
   });
+
+  it("aborts slow requests on timeout and degrades n8n to unavailable without blocking other services", async () => {
+    const baseUrl = await startMockN8nServer((req, res) => {
+      const timer = setTimeout(() => {
+        if (res.writableEnded) return;
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ data: [] }));
+      }, 400);
+
+      req.on("close", () => clearTimeout(timer));
+    });
+
+    const app = buildApp({
+      dockerClient: {
+        async getContainerStatus() {
+          return "running";
+        },
+      },
+      uptimeKumaClient: {
+        async getMonitors() {
+          return [];
+        },
+      },
+      n8nClient: new N8nAdapter({
+        baseUrl,
+        apiKey: "test-n8n-key",
+        timeoutMs: 50,
+      }),
+    });
+
+    try {
+      await app.inject({
+        method: "POST",
+        url: "/api/services",
+        payload: { name: "jellyfin", externalId: "jf-ctr", integration: "docker" },
+      });
+
+      const wfRes = await app.inject({
+        method: "GET",
+        url: "/api/n8n/workflows",
+      });
+      expect(wfRes.statusCode).toBe(200);
+      expect(wfRes.json()).toEqual({
+        integrationStatus: "unavailable",
+        summary: { total: 0, active: 0, failedExecutions: 0 },
+        workflows: [],
+      });
+
+      const servicesRes = await app.inject({
+        method: "GET",
+        url: "/api/services",
+      });
+      expect(servicesRes.statusCode).toBe(200);
+      const servicesBody = servicesRes.json();
+      expect(servicesBody.integrationStatus).toEqual({
+        docker: "available",
+        uptimeKuma: "available",
+        n8n: "unavailable",
+      });
+      expect(servicesBody.services[0]).toMatchObject({
+        name: "jellyfin",
+        status: "running",
+      });
+    } finally {
+      await app.close();
+    }
+  });
 });

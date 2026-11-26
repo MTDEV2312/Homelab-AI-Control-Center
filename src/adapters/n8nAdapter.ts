@@ -43,15 +43,18 @@ const EXECUTION_STATUS_MAP: Record<string, N8nExecutionStatus> = {
 export class N8nAdapter implements N8nClient {
   private baseUrl: string;
   private apiKey: string;
+  private timeoutMs: number;
 
   constructor(options: N8nAdapterOptions) {
     this.baseUrl = options.baseUrl.trim().replace(/\/+$/, "");
     this.apiKey = options.apiKey.trim();
+    this.timeoutMs = options.timeoutMs ?? 5000;
   }
 
   private async fetchJson<T>(path: string): Promise<T> {
     const response = await fetch(`${this.baseUrl}${path}`, {
       headers: { "X-N8N-API-KEY": this.apiKey },
+      signal: AbortSignal.timeout(this.timeoutMs),
     });
     if (!response.ok) {
       throw new Error(`n8n API request failed with status ${response.status}`);
