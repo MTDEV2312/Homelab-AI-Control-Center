@@ -427,4 +427,52 @@ describe("N8nAdapter", () => {
       await app.close();
     }
   });
+
+  it("degrades to unavailable when n8n returns HTTP error JSON on workflows or executions", async () => {
+    const baseUrl = await startMockN8nServer((req, res) => {
+      const url = new URL(req.url ?? "/", "http://localhost");
+      if (url.pathname === "/api/v1/workflows") {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ message: "unauthorized" }));
+        return;
+      }
+
+      if (url.pathname === "/api/v1/executions") {
+        res.writeHead(503, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ message: "service unavailable" }));
+        return;
+      }
+
+      res.writeHead(404).end();
+    });
+
+    const app = buildApp({
+      n8nClient: new N8nAdapter({ baseUrl, apiKey: "test-n8n-key" }),
+    });
+
+    try {
+      const wfRes = await app.inject({
+        method: "GET",
+        url: "/api/n8n/workflows",
+      });
+      expect(wfRes.statusCode).toBe(200);
+      expect(wfRes.json()).toEqual({
+        integrationStatus: "unavailable",
+        summary: { total: 0, active: 0, failedExecutions: 0 },
+        workflows: [],
+      });
+
+      const failedRes = await app.inject({
+        method: "GET",
+        url: "/api/n8n/executions/failed",
+      });
+      expect(failedRes.statusCode).toBe(200);
+      expect(failedRes.json()).toEqual({
+        integrationStatus: "unavailable",
+        executions: [],
+      });
+    } finally {
+      await app.close();
+    }
+  });
 });

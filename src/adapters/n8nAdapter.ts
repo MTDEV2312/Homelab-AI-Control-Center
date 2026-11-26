@@ -53,6 +53,9 @@ export class N8nAdapter implements N8nClient {
     const response = await fetch(`${this.baseUrl}${path}`, {
       headers: { "X-N8N-API-KEY": this.apiKey },
     });
+    if (!response.ok) {
+      throw new Error(`n8n API request failed with status ${response.status}`);
+    }
     return (await response.json()) as T;
   }
 
